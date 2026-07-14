@@ -46,10 +46,28 @@ Remove-Item $tmpZip -Force
 Get-ChildItem -Path $dest -Recurse | Unblock-File -ErrorAction SilentlyContinue
 Unblock-File -Path $dest -ErrorAction SilentlyContinue
 
+# Desktop shortcut with a real icon, so there's something better to click than a
+# plain .bat file. Points at Start Lead Dialer.bat; icon.ico ships in the package.
+try {
+    $iconPath = Join-Path $dest "icon.ico"
+    if (Test-Path $iconPath) {
+        $shortcutPath = Join-Path $desktop "Lead Dialer.lnk"
+        $wsh = New-Object -ComObject WScript.Shell
+        $shortcut = $wsh.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = Join-Path $dest "Start Lead Dialer.bat"
+        $shortcut.WorkingDirectory = $dest
+        $shortcut.IconLocation = $iconPath
+        $shortcut.Save()
+    }
+} catch {
+    Write-Host "(couldn't create a desktop shortcut - you can still use Start Lead Dialer.bat directly)"
+}
+
 Write-Host ""
 Write-Host "Done! Lead Dialer is installed at: $dest"
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Open File Explorer -> Desktop -> LeadDialer-Windows"
 Write-Host "  2. Double-click Setup Calling.bat (one time) to connect your Twilio number"
-Write-Host "  3. Double-click Start Lead Dialer.bat any time to open the app"
+Write-Host "  3. From then on, double-click the new 'Lead Dialer' icon on your Desktop"
+Write-Host "     to open the app (or Start Lead Dialer.bat in that same folder)"
