@@ -2044,6 +2044,7 @@ async function dialSessionBatch(session, batchSize) {
   const batch = auto.queue.slice(auto.idx, auto.idx + batchSize);
   if (!batch.length) return dialCurrent();
   auto._batchSize = batch.length;
+  select(batch[0].id); // show the lead being dialed right away, not just once someone answers
   autoStatusMsg(`Dialing <span class="who">${batch.map(l => esc(l.name)).join(', ')}</span> — ${auto.idx + 1}–${auto.idx + batch.length} of ${auto.queue.length}`);
   setStatus('dialing ' + batch.length + ' lead' + (batch.length > 1 ? 's' : '') + '…');
   let result;

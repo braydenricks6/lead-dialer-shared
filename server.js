@@ -234,11 +234,17 @@ const CLIENT_IDENTITY = 'brayden'; // must match the identity in twilioToken()
 const OUTBOUND_CODE = `exports.handler = function(context, event, callback) {
   const twiml = new Twilio.twiml.VoiceResponse();
   if (event.Mode === 'parallel' && event.Room) {
-    // agent's own leg: join the conference and own its lifecycle (hang up = end the conference)
-    // waitUrl:'' silences Twilio's default hold music while the agent waits alone for a lead
-    // to pick up — the browser plays a local ringback instead so it feels like a normal call.
+    // agent's own leg: join the conference and own its lifecycle (hang up = end the conference).
+    // Two different callers land here and need different audio while waiting alone:
+    // - raw parallel dial (browser/WebRTC): the browser tab plays its own local ringback, so we
+    //   silence Twilio's hold music (waitUrl:'') to avoid a clash.
+    // - "ring my phone" (event.Hold=1): the agent is on a real phone call, not the browser — there
+    //   is no local tone reaching them, so real silence means real silence. Let Twilio's default
+    //   hold music play instead by omitting waitUrl.
     const dial = twiml.dial();
-    dial.conference({ startConferenceOnEnter: true, endConferenceOnExit: true, beep: false, waitUrl: '' }, event.Room);
+    const confOpts = { startConferenceOnEnter: true, endConferenceOnExit: true, beep: false };
+    if (event.Hold !== '1') confOpts.waitUrl = '';
+    dial.conference(confOpts, event.Room);
   } else {
     const timeout = parseInt(event.Timeout, 10) || 20;
     const dial = twiml.dial({ callerId: event.CallerId, answerOnBridge: true, timeout });
@@ -281,6 +287,12 @@ const AUTO_SINGLE_CODE = `exports.handler = function(context, event, callback) {
   }
   callback(null, twiml);
 };`;
+// Fingerprint of the four Function source strings above. Compared against a saved copy in
+// config.json on every boot (syncVoiceFunctionsIfNeeded) so an app update that changes what's
+// dialed out to Twilio actually reaches Twilio, instead of silently sitting unused in this file
+// forever behind ensureParallelInfra/ensureAutoSingleUrl's "already deployed once" caches.
+const FUNCTIONS_CODE_HASH = crypto.createHash('sha256')
+  .update(OUTBOUND_CODE + PARALLEL_CODE + INBOUND_CODE + AUTO_SINGLE_CODE).digest('hex').slice(0, 16);
 
 // Force-deploys all voice functions (creating any that are missing) and returns the service
 // domain. Unlike ensureParallelInfra's cache, this always re-uploads + rebuilds — used when
@@ -320,6 +332,30 @@ async function deployVoiceFunctions() {
   return domain;
 }
 
+// Runs once at every boot. If Twilio is configured and the voice Functions have already been
+// deployed at least once (voiceDomain/parallelLegUrl/autoSingleUrl set), compares the currently
+// saved FUNCTIONS_CODE_HASH against this build's — a mismatch means an app update changed what
+// gets dialed out to Twilio (like the ring-my-phone hold-music fix), so it redeploys automatically
+// instead of that fix silently never reaching Twilio. Never blocks startup; failures just retry
+// next launch.
+async function syncVoiceFunctionsIfNeeded() {
+  try {
+    const need = ['TWILIO_ACCOUNT_SID', 'TWILIO_API_KEY', 'TWILIO_API_SECRET', 'TWILIO_TWIML_APP_SID'];
+    if (need.some(k => !env[k])) return; // Twilio not set up yet
+    const cs = readConfig().callSettings || {};
+    if (!cs.voiceDomain && !cs.parallelLegUrl && !cs.autoSingleUrl) return; // never deployed yet — first deploy happens via normal setup flows
+    if (cs.functionsHash === FUNCTIONS_CODE_HASH) return; // already current
+    console.log('[twilio] Voice Function code changed since last deploy — redeploying to Twilio…');
+    const domain = await deployVoiceFunctions();
+    const c2 = readConfig();
+    c2.callSettings = Object.assign({}, c2.callSettings, { functionsHash: FUNCTIONS_CODE_HASH, voiceDomain: domain });
+    writeConfig(c2);
+    console.log('[twilio] Voice Functions redeployed OK.');
+  } catch (e) {
+    console.log('[twilio] Voice Function auto-redeploy failed (will retry next launch):', e.message);
+  }
+}
+
 // Deploys /inbound and points the given numbers (or all owned numbers) at it, so incoming
 // PSTN calls ring the browser client. Returns which numbers were wired.
 async function enableInbound(numbers) {
@@ -336,7 +372,7 @@ async function enableInbound(numbers) {
     configured.push(n.phone_number);
   }
   const cfg = readConfig();
-  cfg.callSettings = Object.assign({}, cfg.callSettings, { inboundEnabled: true, inboundUrl, inboundNumbers: configured });
+  cfg.callSettings = Object.assign({}, cfg.callSettings, { inboundEnabled: true, inboundUrl, inboundNumbers: configured, functionsHash: FUNCTIONS_CODE_HASH });
   writeConfig(cfg);
   return { inboundUrl, configured };
 }
@@ -348,7 +384,7 @@ async function ensureAutoSingleUrl() {
   const domain = await deployVoiceFunctions();
   const autoSingleUrl = `https://${domain}/auto-single`;
   const c2 = readConfig();
-  c2.callSettings = Object.assign({}, c2.callSettings, { autoSingleUrl });
+  c2.callSettings = Object.assign({}, c2.callSettings, { autoSingleUrl, functionsHash: FUNCTIONS_CODE_HASH });
   writeConfig(c2);
   return autoSingleUrl;
 }
@@ -578,7 +614,9 @@ const server = http.createServer(async (req, res) => {
       let voiceUrl;
       if (mode === 'parallel') {
         if (!room) return json(res, 400, { error: 'room required for parallel mode' });
-        voiceUrl = `https://${domain}/outbound?Mode=parallel&Room=${encodeURIComponent(room)}`;
+        // Hold=1 tells outbound.js this leg is a real phone call (not the browser), so it should
+        // get Twilio's actual hold music instead of dead air while waiting between dial attempts.
+        voiceUrl = `https://${domain}/outbound?Mode=parallel&Room=${encodeURIComponent(room)}&Hold=1`;
       } else {
         if (!to) return json(res, 400, { error: 'to required for direct mode' });
         const timeout = Math.max(5, Math.min(45, Number(timeoutSec) || 20));
@@ -756,4 +794,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Lead Dialer running → http://localhost:${PORT}  (${leads.length} leads loaded)`));
+server.listen(PORT, () => {
+  console.log(`Lead Dialer running → http://localhost:${PORT}  (${leads.length} leads loaded)`);
+  syncVoiceFunctionsIfNeeded(); // fire-and-forget — never delays startup, warns-and-continues on failure
+});
