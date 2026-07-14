@@ -235,6 +235,12 @@
   #cbModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 330px; }
   #cbModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   #cbModal .dTop h3 { font-size: 15px; }
+
+  /* import type (fresh vs aged) */
+  #importTypeModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 58; }
+  #importTypeModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 330px; }
+  #importTypeModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  #importTypeModal .dTop h3 { font-size: 15px; }
   #cbWho { font-size: 12.5px; color: var(--dim); margin-bottom: 12px; }
   .cbPresets { display: flex; gap: 8px; margin-bottom: 12px; }
   .cbPresets button { flex: 1; padding: 9px 4px; font-size: 12.5px; border-radius: 9px; }
@@ -444,6 +450,16 @@
     <div id="cbStatus"></div>
   </div>
 </div>
+<div id="importTypeModal">
+  <div class="box">
+    <div class="dTop"><h3>Import as…</h3><button class="dClose" id="itCloseBtn">✕</button></div>
+    <div class="hint" style="color:var(--dim);font-size:12.5px;margin-bottom:14px">Fresh vs. aged doesn't change on its own later, so pick what these actually are — it's just a different type of lead, not a status.</div>
+    <div class="alActions" style="flex-direction:column;gap:8px">
+      <button class="primary" id="itFresh" style="width:100%">🌱 Fresh leads</button>
+      <button id="itAged" style="width:100%">🕰 Aged leads</button>
+    </div>
+  </div>
+</div>
 <div id="clientsModal">
   <div class="box">
     <div class="dTop"><h3 id="cmTitle">Clients</h3><button class="dClose" id="cmCloseBtn">✕</button></div>
@@ -554,6 +570,13 @@
       <div class="row">
         <select id="dispoFilter" style="flex:1"><option value="">All dispositions</option></select>
         <select id="stateFilter" style="flex:1"><option value="">All states</option></select>
+      </div>
+      <div class="row">
+        <select id="typeFilter" style="flex:1">
+          <option value="">All lead types</option>
+          <option value="fresh">🌱 Fresh</option>
+          <option value="aged">🕰 Aged</option>
+        </select>
       </div>
       <div class="row">
         <label class="optRow" style="margin:0"><input type="checkbox" id="hideCalledToday"> Hide called today</label>
@@ -858,11 +881,13 @@ function filtered() {
   const q = $('search').value.toLowerCase();
   const dispo = $('dispoFilter').value;
   const state = $('stateFilter').value;
+  const type = $('typeFilter').value;
   const hide = $('hideCalledToday').checked;
   return leads.filter(l => {
     if (q && !searchHay(l).includes(q)) return false;
     if (dispo && l.lastDispo !== dispo) return false;
     if (state && String(l.state || '').toUpperCase() !== state) return false;
+    if (type && (l.leadType || 'fresh') !== type) return false;
     if (hide && calledToday(l)) return false;
     if (statusFilter && statusOf(l) !== statusFilter) return false;
     return true;
@@ -878,6 +903,7 @@ function activeFilterCount() {
   if ($('search').value) n++;
   if ($('dispoFilter').value) n++;
   if ($('stateFilter').value) n++;
+  if ($('typeFilter').value) n++;
   if ($('hideCalledToday').checked) n++;
   if (statusFilter) n++;
   return n;
@@ -886,6 +912,7 @@ window.clearFilters = () => {
   $('search').value = '';
   $('dispoFilter').value = '';
   $('stateFilter').value = '';
+  $('typeFilter').value = '';
   $('hideCalledToday').checked = false;
   statusFilter = '';
   renderList();
@@ -924,6 +951,7 @@ function renderList() {
         <div class="sub">${fmtPhone(l.phone)} · ${esc(l.state || '?')}${lt ? ' · ' + lt : ''}</div>
       </div>
       <div class="right">
+        ${l.leadType === 'aged' ? '<span class="chip gray" title="Aged lead">🕰 aged</span>' : ''}
         ${l.blocked ? '<span class="chip red">blocked</span>' : l.lastDispo ? `<span class="chip ${['green','amber','red'].includes(dispoColor(l.lastDispo)) ? dispoColor(l.lastDispo) : 'gray'}">${esc(l.lastDispo)}</span>` : ''}
         <div>${l.lastCalledAt ? 'called ' + stamp(l.lastCalledAt) : ''}${callCount(l) ? ' · ' + callCount(l) + 'x' : ''}</div>
       </div>
@@ -1089,6 +1117,7 @@ function renderDetail() {
         <div class="statusPill ${st}"><span class="dot ${st}"></span>${STATUS_META[st].word}
           ${st !== 'contacted' ? `<a onclick="markContacted(true)" title="Mark as spoken to">· mark reached</a>` : (l.contacted === true ? `<a onclick="markContacted(null)" title="Undo manual mark">· undo</a>` : '')}
           ${callCount(l) ? `<span style="margin-left:8px;color:var(--dim)">· called ${callCount(l)}x</span>` : ''}
+          <a onclick="toggleLeadType()" title="Fresh vs. aged doesn't change on its own — click to correct a mislabeled import" style="margin-left:8px;color:var(--dim)">· ${l.leadType === 'aged' ? '🕰 aged' : '🌱 fresh'}</a>
           ${!l.blocked ? `<a onclick="toggleBlocked()" title="Mark do-not-call — keeps the lead but blocks dialing" style="margin-left:8px;color:var(--dim)">· block</a>` : ''}
           ${l.clientId ? `<a onclick="openClientDetail(${l.clientId});$('clientsModal').style.display='flex'" title="This lead is a client" style="margin-left:8px;color:var(--dim)">· 🏆 view client</a>`
             : `<a onclick="convertLeadToClient()" title="Log this lead as a sold client + policy" style="margin-left:8px;color:var(--dim)">· 🏆 convert to client</a>`}
@@ -1174,6 +1203,14 @@ async function toggleBlocked() {
   renderList(); renderDetail();
 }
 window.toggleBlocked = toggleBlocked;
+
+// fresh/aged doesn't change on its own (set once at import) — this link only exists to fix a mislabeled batch
+async function toggleLeadType() {
+  sel.leadType = (sel.leadType === 'aged') ? 'fresh' : 'aged';
+  await patch(sel, { leadType: sel.leadType });
+  renderList(); renderDetail();
+}
+window.toggleLeadType = toggleLeadType;
 
 async function deleteLead() {
   if (!sel) return;
@@ -2744,6 +2781,17 @@ $('npSave').onclick = saveNewPolicy;
 $('newPolicyModal').addEventListener('click', e => { if (e.target.id === 'newPolicyModal') closeNewPolicy(); });
 
 // ---------- import / export ----------
+// Fresh vs. aged is a lead-quality classification, not a call-progress status (New/Tried/Reached
+// already covers that) — it's asked once per import batch and never changes on its own afterward.
+function chooseLeadType() {
+  return new Promise(resolve => {
+    $('importTypeModal').style.display = 'flex';
+    const done = v => { $('importTypeModal').style.display = 'none'; resolve(v); };
+    $('itFresh').onclick = () => done('fresh');
+    $('itAged').onclick = () => done('aged');
+    $('itCloseBtn').onclick = () => done(null); // cancels the whole import
+  });
+}
 $('importBtn').onclick = () => $('importFile').click();
 $('importFile').onchange = async e => {
   const file = e.target.files[0];
@@ -2774,7 +2822,14 @@ $('importFile').onchange = async e => {
 
   const isRingyRaw = rows[0] && (rows[0].LeadDispositions !== undefined || (rows[0].phoneNumber !== undefined && rows[0].otherInfo !== undefined));
 
-  const mapped = rows.map(r => isRingyRaw ? mapRingyRaw(r) : mapRow(r));
+  const leadType = await chooseLeadType();
+  if (!leadType) { e.target.value = ''; return; } // cancelled
+
+  const mapped = rows.map(r => {
+    const m = isRingyRaw ? mapRingyRaw(r) : mapRow(r);
+    m.leadType = leadType;
+    return m;
+  });
   const r = await api('/api/leads', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(mapped) });
   const src = isRingyRaw ? 'Ringy export (with dispositions, notes, blocked flags)' : 'file';
   alert(`Imported from ${src}:\n${r.added} new, ${r.updated} updated. Total ${r.total}.`);
@@ -2888,7 +2943,7 @@ $('exportBtn').onclick = () => {
 };
 
 // ---------- boot ----------
-['search', 'dispoFilter', 'stateFilter', 'hideCalledToday'].forEach(id => $(id).addEventListener('input', renderList));
+['search', 'dispoFilter', 'stateFilter', 'typeFilter', 'hideCalledToday'].forEach(id => $(id).addEventListener('input', renderList));
 async function load() {
   const [ls, cf] = await Promise.all([api('/api/leads'), api('/api/config')]);
   leads = ls;
