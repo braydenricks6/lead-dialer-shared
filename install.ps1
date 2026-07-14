@@ -9,7 +9,12 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "braydenricks6/lead-dialer-shared"
-$dest = Join-Path $env:USERPROFILE "Desktop\LeadDialer-Windows"
+# Use the real Desktop folder Windows resolves, not a hardcoded path - many
+# accounts (OneDrive Known Folder redirection) put Desktop somewhere other
+# than C:\Users\<you>\Desktop, and a hardcoded guess silently installs to the
+# wrong place with no error.
+$desktop = [Environment]::GetFolderPath("Desktop")
+$dest = Join-Path $desktop "LeadDialer-Windows"
 $zipUrl = "https://github.com/$repo/releases/latest/download/LeadDialer-Windows.zip"
 
 Write-Host "Lead Dialer installer"
@@ -37,7 +42,6 @@ $tmpZip = Join-Path $env:TEMP "leaddialer-$(Get-Random).zip"
 Invoke-WebRequest -Uri $zipUrl -OutFile $tmpZip
 
 Write-Host "Unzipping to $dest..."
-$desktop = Join-Path $env:USERPROFILE "Desktop"
 Expand-Archive -Path $tmpZip -DestinationPath $desktop -Force
 Remove-Item $tmpZip -Force
 
