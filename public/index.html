@@ -1,0 +1,2912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lead Dialer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // applied before first paint so there's no flash of the wrong theme
+  if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light';
+</script>
+<style>
+  :root {
+    --bg: #101216; --panel: #181b21; --panel2: #1f232b; --line: #2a2f39;
+    --text: #e9eaee; --dim: #98a0ad; --accent: #4f7cff; --accent2: #6b8fff;
+    --green: #3fbf7f; --amber: #e6b345; --red: #d95c5c; --gray: #6b7280;
+    --input-bg: #0c0e11; --row-border: #1d2129; --row-hover: #1d222b; --row-sel: #232c3f;
+    --btn-hover-bg: #262b35; --btn-hover-border: #3a4150; --seg-hover: #1c2027;
+    --dot-untouched: #3a4150; --pill-untouched-bg: #22262e;
+    --banner-bg: #46391c; --banner-text: #e8cf8f;
+    --chip-green-bg: rgba(63,191,127,.1); --chip-green-text: #8fe0b5; --chip-green-border: #2c5b43;
+    --chip-amber-bg: rgba(230,179,69,.1); --chip-amber-text: #ecd08a; --chip-amber-border: #6b5a26;
+    --chip-red-bg: rgba(217,92,92,.1); --chip-red-text: #f0a0a0; --chip-red-border: #6b3232;
+    --pill-green-bg: rgba(63,191,127,.15); --pill-amber-bg: rgba(230,179,69,.13);
+    --xchip-red-bg: rgba(217,92,92,.12);
+    --auto-grad-1: #1d2331; --auto-grad-2: #181d28; --auto-border: #2c3550;
+    --setstatus-bg: #14181f; --modal-overlay: rgba(0,0,0,.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f5f7; --panel: #ffffff; --panel2: #eef0f3; --line: #dde1e7;
+    --text: #1a1d23; --dim: #667085; --accent: #3f6ae0; --accent2: #2f57c9;
+    --green: #1f9d5c; --amber: #a9750a; --red: #c9384f; --gray: #6b7280;
+    --input-bg: #ffffff; --row-border: #e7e9ed; --row-hover: #f2f4f7; --row-sel: #e8edfb;
+    --btn-hover-bg: #e4e7ec; --btn-hover-border: #c8cdd6; --seg-hover: #e9ebef;
+    --dot-untouched: #c3c8d1; --pill-untouched-bg: #eceef1;
+    --banner-bg: #fdf1d6; --banner-text: #8a6416;
+    --chip-green-bg: #e5f7ee; --chip-green-text: #187a49; --chip-green-border: #b7e6cc;
+    --chip-amber-bg: #fbf1d9; --chip-amber-text: #8a6416; --chip-amber-border: #edd9a3;
+    --chip-red-bg: #fbe8ea; --chip-red-text: #ab2540; --chip-red-border: #f0bcc4;
+    --pill-green-bg: #e5f7ee; --pill-amber-bg: #fbf1d9;
+    --xchip-red-bg: #fbe8ea;
+    --auto-grad-1: #eef2ff; --auto-grad-2: #ffffff; --auto-border: #cdd6f5;
+    --setstatus-bg: #f4f5f7; --modal-overlay: rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 13px; cursor: pointer; font: inherit; transition: background .12s, border-color .12s; }
+  button:hover { background: var(--btn-hover-bg); border-color: var(--btn-hover-border); }
+  button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { background: var(--accent2); }
+  button.danger { background: var(--red); border-color: var(--red); }
+  button.good { background: var(--green); border-color: var(--green); font-weight: 600; }
+  button.ghost { background: transparent; border-color: transparent; color: var(--dim); padding: 4px 8px; }
+  button.ghost:hover { color: var(--text); background: var(--panel2); }
+  input, textarea, select { background: var(--input-bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; font: inherit; }
+  select {
+    /* min-width:0 lets a flex:1 select shrink below its widest option instead of overflowing the sidebar */
+    min-width: 0; padding-right: 28px; text-overflow: ellipsis;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a8a8a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 11px center;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; display: flex; align-items: center; gap: 9px; }
+  header h1::before { content: '📞'; font-size: 13px; width: 27px; height: 27px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 2px 8px rgba(79,124,255,.35); }
+  header .spacer { flex: 1; }
+  #count { color: var(--dim); font-size: 13px; }
+  #banner { background: var(--banner-bg); color: var(--banner-text); padding: 8px 16px; font-size: 13px; display: none; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #listPane { width: 400px; min-width: 340px; border-right: 1px solid var(--line); display: flex; flex-direction: column; background: var(--panel); }
+
+  /* auto-dial card */
+  #autoCard { margin: 10px; padding: 12px; background: linear-gradient(180deg, var(--auto-grad-1), var(--auto-grad-2)); border: 1px solid var(--auto-border); border-radius: 12px; }
+  #autoCard h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--accent2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  #autoCard h3::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  #autoCard.running h3::before { animation: pulse 1.2s infinite; background: var(--green); }
+  #autoCard h3 .chev { font-size: 11px; transition: transform .15s; margin-left: -2px; }
+  #autoCard.collapsed h3 .chev { transform: rotate(-90deg); }
+  #autoCard.collapsed h3 { margin-bottom: 0; }
+  #autoCard.collapsed #autoBody { display: none; }
+  #autoMini { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--dim); font-weight: 400; font-size: 12px; }
+  #autoCard:not(.collapsed) #autoMini { display: none; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .optRow { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; color: var(--dim); flex-wrap: wrap; }
+  .optRow label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .optRow input[type=checkbox], .optRow input[type=radio] { accent-color: var(--accent); }
+  #queueInfo { font-size: 13px; margin: 8px 0 6px; color: var(--text); }
+  #queueInfo b { color: var(--accent2); }
+  #autoStatus { font-size: 13px; margin: 6px 0; }
+  #autoStatus .who { font-weight: 700; }
+  #autoStatus .pulse { display: inline-block; animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+  .excludeChips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+  .xchip { font-size: 12px; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--line); color: var(--dim); cursor: pointer; user-select: none; }
+  .xchip.on { border-color: var(--red); color: var(--chip-red-text); background: var(--xchip-red-bg); text-decoration: line-through; }
+
+  /* filters */
+  #filters { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--line); }
+  .seg { display: flex; background: var(--input-bg); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { flex: 1; border: none; border-radius: 0; background: transparent; padding: 6px 2px; font-size: 12px; color: var(--dim); }
+  .seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+  .seg button:hover:not(.on) { background: var(--seg-hover); }
+  .row { display: flex; gap: 8px; align-items: center; }
+
+  /* list */
+  #leadList { flex: 1; overflow-y: auto; }
+  .leadRow { padding: 10px 14px; border-bottom: 1px solid var(--row-border); cursor: pointer; display: flex; align-items: center; gap: 10px; }
+  .leadRow:hover { background: var(--row-hover); }
+  .leadRow.sel { background: var(--row-sel); box-shadow: inset 3px 0 0 var(--accent); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.contacted { background: var(--green); box-shadow: 0 0 6px rgba(63,191,127,.5); }
+  .dot.attempted { background: var(--amber); }
+  .dot.untouched { background: var(--dot-untouched); }
+  /* initials avatar — hue from the name, status shown as a badge dot on the corner */
+  .av { width: 34px; height: 34px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; position: relative; letter-spacing: .5px; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .av::after { content: ''; position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--panel); }
+  .av.contacted::after { background: var(--green); }
+  .av.attempted::after { background: var(--amber); }
+  .av.untouched::after { background: var(--dot-untouched); }
+  .av.big { width: 48px; height: 48px; font-size: 17px; }
+  .av.big::after { width: 14px; height: 14px; border-color: var(--bg); }
+  .topId { display: flex; gap: 14px; align-items: flex-start; }
+  .leadRow .mid { flex: 1; min-width: 0; }
+  .leadRow .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .leadRow .sub { color: var(--dim); font-size: 12px; }
+  .leadRow .right { text-align: right; font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; border: 1px solid var(--line); }
+  .chip.green { color: var(--chip-green-text); border-color: var(--chip-green-border); background: var(--chip-green-bg); }
+  .chip.amber { color: var(--chip-amber-text); border-color: var(--chip-amber-border); background: var(--chip-amber-bg); }
+  .chip.red { color: var(--chip-red-text); border-color: var(--chip-red-border); background: var(--chip-red-bg); }
+  .chip.gray { color: var(--dim); }
+
+  /* detail */
+  #detail { flex: 1; overflow-y: auto; padding: 22px 28px; }
+  #empty { padding: 60px 20px; color: var(--dim); text-align: center; font-size: 15px; }
+  #empty .keys { margin-top: 18px; font-size: 12.5px; opacity: .8; }
+  #empty .keys b { display: inline-block; min-width: 18px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel2); font-weight: 600; font-size: 11.5px; }
+  .top { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .top h2 { font-size: 26px; font-weight: 700; }
+  #phoneBig { font-size: 20px; color: var(--accent2); text-decoration: none; font-weight: 600; }
+  .meta { color: var(--dim); font-size: 13px; margin-top: 3px; }
+  .statusPill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 600; margin-top: 8px; }
+  .statusPill .dot { width: 8px; height: 8px; }
+  .statusPill.contacted { background: var(--pill-green-bg); color: var(--chip-green-text); }
+  .statusPill.attempted { background: var(--pill-amber-bg); color: var(--chip-amber-text); }
+  .statusPill.untouched { background: var(--pill-untouched-bg); color: var(--dim); }
+  .statusPill a { color: inherit; opacity: .7; cursor: pointer; font-weight: 400; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 7px 20px; margin: 16px 0; font-size: 13px; padding: 14px; background: var(--panel); border-radius: 10px; border: 1px solid var(--line); }
+  .fields b { color: var(--dim); font-weight: 500; }
+  .fields > div { overflow-wrap: anywhere; }
+  .profileCards { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 0; }
+  .addrCard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 13.5px; line-height: 1.5; min-width: 220px; }
+  .addrCard .lbl { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+  .addrCard a { color: var(--accent); text-decoration: none; font-size: 12.5px; }
+  .factsCard { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px 18px; min-width: 260px; }
+  .fact .lbl { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .fact .val { font-size: 13.5px; margin-top: 1px; overflow-wrap: anywhere; }
+  details.moreFields { margin: 10px 0 0; }
+  details.moreFields summary { cursor: pointer; color: var(--dim); font-size: 12.5px; padding: 4px 0; user-select: none; }
+  details.moreFields summary:hover { color: var(--text); }
+  details.moreFields .fields { margin: 8px 0 0; }
+  #workup { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin: 16px 0 0; overflow: hidden; }
+  .wTabs { display: flex; border-bottom: 1px solid var(--line); }
+  .wTabs button { background: none; border: none; border-radius: 0; padding: 10px 16px; color: var(--dim); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; border-bottom: 2px solid transparent; }
+  .wTabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .wTabs .wRight { margin-left: auto; display: flex; align-items: center; padding-right: 10px; gap: 10px; }
+  .wTabs .wRight button { text-transform: none; padding: 6px 8px; }
+  .wPane { padding: 14px 16px; }
+  .wGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 14px; margin-bottom: 6px; }
+  .wField span { display: block; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .wField input { width: 100%; padding: 6px 9px; font-size: 13px; }
+  .wRowLbl { color: var(--dim); font-size: 11.5px; margin: 10px 0 6px; }
+  .wNote { color: var(--dim); font-size: 11.5px; margin-top: 8px; }
+  #wSave { color: var(--green); font-size: 11.5px; min-height: 15px; padding: 0 16px 8px; text-align: right; }
+  #callBar { display: flex; align-items: center; gap: 12px; margin: 16px 0; padding: 14px; background: var(--panel2); border-radius: 12px; border: 1px solid var(--line); flex-wrap: wrap; }
+  #callStatus { color: var(--dim); }
+  #dispoBar { display: flex; gap: 7px; flex-wrap: wrap; margin: 14px 0; }
+  #dispoBar button { border-left-width: 3px; }
+  #dispoBar button .kbd { opacity: .45; font-size: 10.5px; margin-right: 5px; }
+  #dispoBar button.cGreen { border-left-color: var(--green); }
+  #dispoBar button.cAmber { border-left-color: var(--amber); }
+  #dispoBar button.cRed { border-left-color: var(--red); }
+  #dispoBar button.cGray { border-left-color: var(--gray); }
+  #dispoBar.attention button { animation: glow 1s infinite alternate; }
+  @keyframes glow { to { border-color: var(--accent); } }
+  #dispoHint { font-size: 12.5px; color: var(--accent2); height: 16px; margin: -6px 0 8px; }
+  #notes { width: 100%; min-height: 130px; resize: vertical; }
+  #saveState { font-size: 12px; color: var(--green); height: 16px; }
+  #log { margin-top: 12px; }
+  #log h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); margin-bottom: 6px; }
+  #log .entry { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; color: var(--dim); }
+  #log .entry button { padding: 0 7px; font-size: 12px; line-height: 1.5; }
+  .navBtns { display: flex; gap: 8px; margin-left: auto; }
+
+  /* modal */
+  #modal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 50; }
+  #modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: 520px; max-height: 80vh; overflow-y: auto; }
+  #modal h3 { margin-bottom: 4px; }
+  #modal .hint { color: var(--dim); font-size: 12.5px; margin-bottom: 14px; }
+
+  /* manual dialer */
+  #dialerModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 55; }
+  #dialerModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 300px; }
+  #dialerModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  #dialerModal .dTop h3 { font-size: 15px; }
+  #dialerModal .dClose { padding: 2px 9px; }
+  #dpNum { width: 100%; text-align: center; font-size: 24px; letter-spacing: 1px; padding: 10px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--text); margin-bottom: 4px; }
+  #dpFrom { text-align: center; color: var(--dim); font-size: 11.5px; min-height: 15px; margin-bottom: 10px; }
+  .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .dpad button { font-size: 19px; padding: 12px 0; border-radius: 10px; background: var(--panel2); font-weight: 500; }
+  .dpad button small { display: block; font-size: 8.5px; letter-spacing: 2px; color: var(--dim); font-weight: 400; }
+  .dpad button:active { background: var(--accent); color: #fff; }
+  #dpActions { display: flex; gap: 8px; align-items: center; }
+  #dpActions button { flex: 1; padding: 12px 0; font-size: 15px; border-radius: 10px; }
+  #dpBack { flex: 0 0 auto; padding: 12px 14px; }
+  #dpStatus { text-align: center; color: var(--dim); font-size: 12px; min-height: 16px; margin-top: 10px; }
+
+  /* add lead */
+  #addLeadModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 55; }
+  #addLeadModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 360px; }
+  #addLeadModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  #addLeadModal .dTop h3 { font-size: 15px; }
+  .alField { margin-bottom: 10px; }
+  .alField label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .alField input, .alField textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); color: var(--text); font: inherit; }
+  .alRow { display: flex; gap: 10px; }
+  .alOpt { font-size: 10.5px; color: var(--dim); opacity: .7; }
+  .alActions { display: flex; gap: 8px; margin-top: 4px; }
+  #alStatus { font-size: 12px; color: var(--dim); min-height: 16px; margin-top: 8px; text-align: center; }
+
+  /* callback scheduling */
+  #cbModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 56; }
+  #cbModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 330px; }
+  #cbModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  #cbModal .dTop h3 { font-size: 15px; }
+  #cbWho { font-size: 12.5px; color: var(--dim); margin-bottom: 12px; }
+  .cbPresets { display: flex; gap: 8px; margin-bottom: 12px; }
+  .cbPresets button { flex: 1; padding: 9px 4px; font-size: 12.5px; border-radius: 9px; }
+  .cbPresets button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  #cbStatus { font-size: 12px; color: var(--dim); min-height: 16px; margin-top: 8px; text-align: center; }
+
+  /* due-callbacks strip */
+  #dueStrip { margin: 0 10px 10px; padding: 9px 12px; border: 1px solid var(--chip-amber-border); background: var(--chip-amber-bg); border-radius: 10px; font-size: 12.5px; display: none; }
+  #dueStrip .dueHead { font-weight: 700; color: var(--chip-amber-text); margin-bottom: 4px; }
+  #dueStrip .dueItem { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; cursor: pointer; border-radius: 6px; }
+  #dueStrip .dueItem:hover { text-decoration: underline; }
+  #dueStrip .dueItem .t { color: var(--dim); white-space: nowrap; }
+  #dueStrip .dueItem.late .t { color: var(--chip-red-text); font-weight: 600; }
+
+  /* incoming call */
+  #incomingCall { position: fixed; top: 16px; right: 16px; width: 260px; background: var(--panel); border: 1px solid var(--green); border-radius: 14px; padding: 16px; z-index: 60; display: none; box-shadow: 0 10px 30px rgba(0,0,0,.35); animation: icPulse 1.4s infinite; }
+  @keyframes icPulse { 0%,100% { box-shadow: 0 10px 30px rgba(0,0,0,.35); } 50% { box-shadow: 0 0 0 3px var(--green), 0 10px 30px rgba(0,0,0,.35); } }
+  #incomingCall .icTag { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--green); font-weight: 600; margin-bottom: 6px; }
+  #icWho { font-size: 17px; font-weight: 600; }
+  #icSub { font-size: 12px; color: var(--dim); margin: 2px 0 12px; min-height: 15px; }
+  #incomingCall .icBtns { display: flex; gap: 8px; }
+  #incomingCall .icBtns button { flex: 1; padding: 9px 0; }
+
+  /* dashboard */
+  #dashModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 50; }
+  #dashModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: 760px; max-width: calc(100vw - 40px); max-height: 88vh; overflow-y: auto; }
+  #dashModal h3 { margin-bottom: 4px; }
+  #dashModal .hint { color: var(--dim); font-size: 12.5px; margin-bottom: 14px; }
+  .dashSeg { display: flex; gap: 6px; margin-bottom: 16px; }
+  .dashSeg button { padding: 5px 12px; font-size: 12.5px; border-radius: 999px; }
+  .dashSeg button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .dashTiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+  .dtile { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .dtile .num { font-size: 26px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .dtile .lbl { font-size: 11.5px; color: var(--dim); letter-spacing: .3px; margin-top: 2px; }
+  .dashSection { margin-bottom: 18px; }
+  .dashSection h4 { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; font-weight: 600; }
+  .pipeBar { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; margin-bottom: 8px; }
+  .pipeBar div { min-width: 3px; }
+  .pipeLegend { display: flex; gap: 18px; font-size: 12.5px; color: var(--dim); flex-wrap: wrap; }
+  .pipeLegend b { color: var(--text); font-weight: 600; }
+  .pipeLegend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dailyChart { display: flex; align-items: flex-end; gap: 2px; height: 110px; }
+  .dailyChart .dcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; cursor: default; }
+  .dailyChart .dbar { background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .dailyChart .dcol:hover .dbar { background: var(--accent2); }
+  .dailyLabels { display: flex; gap: 2px; margin-top: 4px; }
+  .dailyLabels span { flex: 1; text-align: center; font-size: 10px; color: var(--dim); }
+  .dispoRows { display: flex; flex-direction: column; gap: 7px; }
+  #numberHealth .drow { display: flex; align-items: center; gap: 12px; font-size: 13px; margin-bottom: 6px; }
+  #numberHealth .nm { min-width: 120px; font-weight: 600; }
+  #numberHealth .nhStat { color: var(--dim); min-width: 140px; }
+  .drow { display: grid; grid-template-columns: 150px 1fr 34px; gap: 10px; align-items: center; font-size: 12.5px; }
+  .drow .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .drow .track { height: 10px; border-radius: 5px; background: var(--input-bg); overflow: hidden; }
+  .drow .fill { height: 100%; border-radius: 5px; min-width: 2px; }
+  .drow .ct { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+  #dashTip { position: fixed; z-index: 60; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: 12px; pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  .dashEmpty { color: var(--dim); font-size: 12.5px; padding: 8px 0; }
+  .dRow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--row-border); font-size: 13.5px; }
+  .dRow .dn { flex: 1; font-weight: 600; }
+  .dRow label { display: flex; align-items: center; gap: 5px; color: var(--dim); font-size: 12.5px; cursor: pointer; }
+  .dRow input[type=checkbox] { accent-color: var(--accent); }
+  #addRow { display: flex; gap: 8px; margin-top: 12px; }
+  #addRow input[type=text] { flex: 1; }
+  .setSection { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .setSection:last-of-type { border-bottom: none; }
+  .setSection h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--accent2); margin-bottom: 10px; }
+  .setRow { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13.5px; flex-wrap: wrap; }
+  .setRow label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .setRow input[type=number] { width: 64px; }
+  .setRow select { padding: 5px 8px; }
+  .setNote { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .setStatus { font-size: 13px; padding: 8px 12px; background: var(--setstatus-bg); border-radius: 8px; border: 1px solid var(--line); }
+  .setStatus b { color: var(--green); }
+
+  /* clients & policies */
+  #clientsModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 50; }
+  #clientsModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: 920px; max-width: calc(100vw - 40px); max-height: 88vh; overflow-y: auto; }
+  #clientsModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  #clientsModal .hint { color: var(--dim); font-size: 12.5px; margin-bottom: 14px; }
+  .clientsToolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .clientsToolbar .spacer { flex: 1; }
+  .clientTable { display: flex; flex-direction: column; }
+  .cRow { display: grid; grid-template-columns: 90px 1.3fr 55px 1.4fr 1.6fr 90px 1fr 1.3fr; gap: 10px; align-items: center; padding: 9px 6px; border-bottom: 1px solid var(--row-border); font-size: 12.5px; }
+  .cRow.head { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--line); }
+  .cRow.data { cursor: pointer; border-radius: 8px; }
+  .cRow.data:hover { background: var(--row-hover); }
+  .cRow .cName { font-weight: 600; }
+  .cRow .cSub { color: var(--dim); font-size: 11.5px; }
+  .cRow .cPolicies { display: flex; flex-wrap: wrap; gap: 4px; }
+  .polChip { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 11px; background: var(--chip-green-bg); color: var(--chip-green-text); border: 1px solid var(--chip-green-border); }
+  .clientsEmpty { color: var(--dim); font-size: 12.5px; padding: 20px 0; text-align: center; }
+  .clientDetailTop { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+  .clientDetailTop h3 { margin-bottom: 2px; }
+  .clientDetailTop .meta { color: var(--dim); font-size: 12.5px; }
+  .cdCards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+  .cdCard { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+  .cdCard .lbl { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+  .cdCard .val { margin-bottom: 8px; }
+  .cdCard .val:last-child { margin-bottom: 0; }
+  .polList { display: flex; flex-direction: column; gap: 8px; }
+  .polCard { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .polCard .polTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .polCard .polTop b { font-size: 14px; }
+  .polGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 14px; font-size: 12.5px; }
+  .polGrid .lbl { color: var(--dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
+  .statusChip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .statusChip.active { background: var(--chip-green-bg); color: var(--chip-green-text); }
+  .statusChip.pending { background: var(--chip-amber-bg); color: var(--chip-amber-text); }
+  .statusChip.lapsed, .statusChip.cancelled { background: var(--chip-red-bg); color: var(--chip-red-text); }
+
+  #newClientModal, #newPolicyModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 57; }
+  #newClientModal .box, #newPolicyModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 460px; max-height: 86vh; overflow-y: auto; }
+  #newClientModal .dTop, #newPolicyModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  #newClientModal .dTop h3, #newPolicyModal .dTop h3 { font-size: 15px; }
+  #ncStatus, #npStatus { font-size: 12px; color: var(--dim); min-height: 16px; margin-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lead Dialer</h1>
+  <span id="count"></span>
+  <div class="spacer"></div>
+  <button id="addLeadBtn" title="Add a single lead by hand">+ Add Lead</button>
+  <button id="dialerBtn" title="Manual dialer — type any number">📞 Dialer</button>
+  <button id="dashBtn" title="Calling stats dashboard">📊 Stats</button>
+  <button id="clientsBtn" title="Clients & policies — track actual sales">🏆 Clients</button>
+  <button id="themeToggle" title="Toggle light/dark mode">🌙 Dark</button>
+  <button id="settingsBtn" title="App settings">⚙ Settings</button>
+  <button id="importBtn">Import</button>
+  <input type="file" id="importFile" accept=".json,.csv" style="display:none">
+  <button id="exportBtn">Export</button>
+</header>
+<div id="banner"></div>
+<div id="incomingCall">
+  <div class="icTag" id="icTag">Incoming call</div>
+  <div id="icWho"></div>
+  <div id="icSub"></div>
+  <div class="icBtns" id="icRingBtns">
+    <button class="good" id="icAccept">Accept</button>
+    <button class="danger" id="icDecline">Decline</button>
+  </div>
+  <div class="icBtns" id="icCallBtns" style="display:none">
+    <button id="icMute">🎙 Mute</button>
+    <button class="danger" id="icHang">Hang up</button>
+  </div>
+</div>
+<div id="dialerModal">
+  <div class="box">
+    <div class="dTop"><h3>Manual Dialer</h3><button class="dClose" id="dpCloseBtn">✕</button></div>
+    <input id="dpNum" placeholder="(000) 000-0000" inputmode="tel" autocomplete="off">
+    <div id="dpFrom"></div>
+    <div class="dpad" id="dpad">
+      <button data-k="1">1<small>&nbsp;</small></button>
+      <button data-k="2">2<small>ABC</small></button>
+      <button data-k="3">3<small>DEF</small></button>
+      <button data-k="4">4<small>GHI</small></button>
+      <button data-k="5">5<small>JKL</small></button>
+      <button data-k="6">6<small>MNO</small></button>
+      <button data-k="7">7<small>PQRS</small></button>
+      <button data-k="8">8<small>TUV</small></button>
+      <button data-k="9">9<small>WXYZ</small></button>
+      <button data-k="*">*<small>&nbsp;</small></button>
+      <button data-k="0">0<small>+</small></button>
+      <button data-k="#">#<small>&nbsp;</small></button>
+    </div>
+    <div id="dpActions">
+      <button class="good" id="dpCall">📞 Call</button>
+      <button class="danger" id="dpHang" style="display:none">Hang up</button>
+      <button id="dpMute" style="display:none">🎙 Mute</button>
+      <button id="dpBack" title="Delete">⌫</button>
+    </div>
+    <div id="dpStatus"></div>
+  </div>
+</div>
+<div id="addLeadModal">
+  <div class="box">
+    <div class="dTop"><h3>Add Lead</h3><button class="dClose" id="alCloseBtn">✕</button></div>
+    <div class="alField"><label>Name</label><input id="alName" placeholder="Jane Doe"></div>
+    <div class="alField"><label>Phone</label><input id="alPhone" inputmode="tel" placeholder="(555) 123-4567"></div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>State</label><input id="alState" placeholder="OH" maxlength="20"></div>
+      <div class="alField" style="flex:2"><label>Email <span class="alOpt">optional</span></label><input id="alEmail" placeholder="jane@email.com"></div>
+    </div>
+    <div class="alField"><label>Notes <span class="alOpt">optional</span></label><textarea id="alNotes" rows="2" placeholder="How they came in, context…"></textarea></div>
+    <div class="alActions">
+      <button class="primary" id="alSave" style="flex:1">Save lead</button>
+    </div>
+    <div id="alStatus"></div>
+  </div>
+</div>
+<div id="cbModal">
+  <div class="box">
+    <div class="dTop"><h3>📅 Schedule callback</h3><button class="dClose" id="cbCloseBtn">✕</button></div>
+    <div id="cbWho"></div>
+    <div class="cbPresets">
+      <button data-preset="1h">In 1 hour</button>
+      <button data-preset="tmrw-am">Tomorrow 9am</button>
+      <button data-preset="tmrw-pm">Tomorrow 2pm</button>
+    </div>
+    <div class="alField"><label>Or pick a time</label><input type="datetime-local" id="cbWhen"></div>
+    <div class="alField"><label>Note <span class="alOpt">optional</span></label><input id="cbNote" placeholder="e.g. wants to talk after payday"></div>
+    <div class="alActions">
+      <button class="primary" id="cbSave" style="flex:1">Save callback</button>
+    </div>
+    <div id="cbStatus"></div>
+  </div>
+</div>
+<div id="clientsModal">
+  <div class="box">
+    <div class="dTop"><h3 id="cmTitle">Clients</h3><button class="dClose" id="cmCloseBtn">✕</button></div>
+    <div class="hint" id="cmHint">Everyone you've actually sold — separate from the lead queue.</div>
+    <div id="cmBody"></div>
+  </div>
+</div>
+<div id="newClientModal">
+  <div class="box">
+    <div class="dTop"><h3>New Client</h3><button class="dClose" id="ncCloseBtn">✕</button></div>
+    <div class="alField"><label>Name</label><input id="ncName" placeholder="Jane Doe"></div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Phone</label><input id="ncPhone" inputmode="tel" placeholder="(555) 123-4567"></div>
+      <div class="alField" style="flex:1"><label>Email <span class="alOpt">optional</span></label><input id="ncEmail" placeholder="jane@email.com"></div>
+    </div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Date of birth <span class="alOpt">optional</span></label><input id="ncDob" type="date"></div>
+      <div class="alField" style="flex:1"><label>Marital status <span class="alOpt">optional</span></label>
+        <select id="ncMarital"><option value="">—</option><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select>
+      </div>
+    </div>
+    <div class="alField"><label>Address <span class="alOpt">optional</span></label><input id="ncAddress" placeholder="Street address"></div>
+    <div class="alRow">
+      <div class="alField" style="flex:2"><label>City</label><input id="ncCity"></div>
+      <div class="alField" style="flex:1"><label>State</label><input id="ncState" maxlength="20"></div>
+      <div class="alField" style="flex:1"><label>Zip</label><input id="ncZip"></div>
+    </div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Occupation <span class="alOpt">optional</span></label><input id="ncOccupation"></div>
+      <div class="alField" style="flex:1"><label>Annual income <span class="alOpt">optional</span></label><input id="ncIncome" inputmode="numeric" placeholder="$"></div>
+    </div>
+    <div class="alField"><label>Lead source <span class="alOpt">optional</span></label><input id="ncSource" placeholder="e.g. GetSeniorQuotes.com"></div>
+    <div class="alField"><label>Notes <span class="alOpt">optional</span></label><textarea id="ncNotes" rows="2"></textarea></div>
+    <div class="alActions">
+      <button class="primary" id="ncSave" style="flex:1">Save client</button>
+    </div>
+    <div id="ncStatus"></div>
+  </div>
+</div>
+<div id="newPolicyModal">
+  <div class="box">
+    <div class="dTop"><h3>New Policy</h3><button class="dClose" id="npCloseBtn">✕</button></div>
+    <div class="hint" id="npWho" style="color:var(--dim);font-size:12.5px;margin-bottom:12px"></div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Carrier</label><input id="npCarrier" list="carrierList" placeholder="e.g. Transamerica"></div>
+      <div class="alField" style="flex:1"><label>Product <span class="alOpt">optional</span></label><input id="npProduct" placeholder="e.g. FEXB"></div>
+    </div>
+    <datalist id="carrierList">
+      <option value="Transamerica"><option value="Foresters"><option value="Corebridge"><option value="RNA">
+      <option value="MOO"><option value="Americo"><option value="Mutual of Omaha"><option value="Aetna">
+    </datalist>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Policy #</label><input id="npNumber"></div>
+      <div class="alField" style="flex:1"><label>Status</label>
+        <select id="npStatus2"><option>Active</option><option>Pending</option><option>Lapsed</option><option>Cancelled</option></select>
+      </div>
+    </div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Coverage amount</label><input id="npCoverage" inputmode="numeric" placeholder="$"></div>
+      <div class="alField" style="flex:1"><label>Monthly premium</label><input id="npPremium" inputmode="numeric" placeholder="$"></div>
+    </div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Draft day <span class="alOpt">optional</span></label><input id="npDraftDay" inputmode="numeric" placeholder="1–28"></div>
+      <div class="alField" style="flex:1"><label>Premium frequency</label>
+        <select id="npFrequency"><option>monthly</option><option>quarterly</option><option>semi-annual</option><option>annual</option></select>
+      </div>
+    </div>
+    <div class="alRow">
+      <div class="alField" style="flex:1"><label>Date sold</label><input id="npDateSold" type="date"></div>
+      <div class="alField" style="flex:1"><label>Effective date <span class="alOpt">optional</span></label><input id="npEffective" type="date"></div>
+    </div>
+    <div class="alActions">
+      <button class="primary" id="npSave" style="flex:1">Save policy</button>
+    </div>
+    <div id="npStatus"></div>
+  </div>
+</div>
+<main>
+  <div id="listPane">
+    <div id="autoCard">
+      <h3 id="autoToggle" title="Show/hide auto-dial options"><span class="chev">▾</span>Auto-Dial<span id="autoMini"></span></h3>
+      <div id="autoBody">
+      <div id="autoSetup">
+        <div class="optRow">
+          <label><input type="radio" name="who" value="notReached" checked> Haven't reached</label>
+          <label><input type="radio" name="who" value="untouched"> Never called</label>
+          <label><input type="radio" name="who" value="all"> Everyone</label>
+        </div>
+        <div class="optRow"><label><input type="checkbox" id="skipToday" checked> Skip anyone already called today</label></div>
+        <div class="optRow" style="align-items:flex-start"><span style="padding-top:3px">Skip:</span><div class="excludeChips" id="excludeChips"></div></div>
+        <div id="queueInfo"></div>
+        <button class="primary" id="autoStart" style="width:100%">▶ Start Auto-Dial</button>
+      </div>
+      <div id="autoRun" style="display:none">
+        <div id="autoStatus"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="good" id="autoNow" style="flex:1">Dial now</button>
+          <button id="autoSkip">Skip</button>
+          <button class="danger" id="autoStop">■ Stop</button>
+        </div>
+      </div>
+      </div>
+    </div>
+    <div id="dueStrip"></div>
+    <div id="filters">
+      <div class="seg" id="statusSeg"></div>
+      <div class="row"><input id="search" placeholder="Search name, phone, email, city, zip…" style="flex:1"></div>
+      <div class="row">
+        <select id="dispoFilter" style="flex:1"><option value="">All dispositions</option></select>
+        <select id="stateFilter" style="flex:1"><option value="">All states</option></select>
+      </div>
+      <div class="row">
+        <label class="optRow" style="margin:0"><input type="checkbox" id="hideCalledToday"> Hide called today</label>
+        <a id="clearFilters" style="display:none;cursor:pointer;color:var(--accent);font-size:12.5px;margin-left:auto" onclick="clearFilters()">Clear filters</a>
+      </div>
+    </div>
+    <div id="leadList"></div>
+  </div>
+  <div id="detail"><div id="empty">Pick a lead, or press ▶ Start Auto-Dial.</div></div>
+</main>
+
+<div id="dashModal">
+  <div class="box">
+    <h3>Dashboard</h3>
+    <div class="hint">Calling activity from your local lead data. Only dispositioned calls are counted.</div>
+    <div class="dashSeg" id="dashSeg"></div>
+    <div class="dashTiles" id="dashTiles"></div>
+    <div class="dashSection"><h4>Pipeline — all leads</h4><div class="pipeBar" id="pipeBar"></div><div class="pipeLegend" id="pipeLegend"></div></div>
+    <div class="dashSection"><h4>Calls per day — last 14 days</h4><div class="dailyChart" id="dailyChart"></div><div class="dailyLabels" id="dailyLabels"></div></div>
+    <div class="dashSection"><h4 id="dispoHead">Dispositions</h4><div class="dispoRows" id="dispoRows"></div></div>
+    <div class="dashSection"><h4>Number health — last 7 days</h4><div id="numberHealth"></div></div>
+    <div class="dashSection"><h4>Best time to call — answer rate by their local hour</h4><div class="dailyChart" id="hourChart"></div><div class="dailyLabels" id="hourLabels"></div><div class="hint" id="hourHint" style="margin:6px 0 0"></div></div>
+    <div class="row" style="margin-top:6px; justify-content:flex-end"><button id="closeDash">Done</button></div>
+  </div>
+  <div id="dashTip"></div>
+</div>
+
+<div id="modal">
+  <div class="box" style="width:580px">
+    <h3>Settings</h3>
+    <div class="hint">Changes save automatically and apply the next time you build a queue or place a call.</div>
+
+    <div class="setSection">
+      <h4>Calling</h4>
+      <div class="setRow" id="callerIdStatus"></div>
+      <div class="setRow">
+        <label>Ring timeout <input type="number" id="ringTimeout" min="5" max="45"> sec</label>
+      </div>
+      <div class="setNote">How long a call rings before Twilio gives up and marks it unanswered. Shorter = less dead time waiting on no-answers, but risks cutting off someone slow to reach their phone.</div>
+      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="rmpEnabled"> Ring my phone instead of using this browser tab</label></div>
+      <div class="setRow" id="rmpNumRow" style="display:none">
+        <input type="text" id="rmpNumber" placeholder="Your cell number, e.g. 385 555 1234" style="width:260px">
+      </div>
+      <div class="setNote">Calls ring your cell first — answer like a normal call and you're bridged to the lead. No browser mic/speaker needed. Leave this off to talk through the computer (headset), which most people prefer for volume dialing.</div>
+    </div>
+
+    <div class="setSection">
+      <h4>Inbound Calls</h4>
+      <div class="setNote" id="inboundStatus">Checking…</div>
+      <div class="setRow" style="margin-top:8px">
+        <button id="enableInbound">Ring my browser on incoming calls</button>
+      </div>
+      <div class="setNote">Routes calls to your Twilio numbers into this app — a banner pops up with Accept / Decline, and if the caller matches a lead, their profile opens automatically. This changes the inbound webhook on your numbers. When someone calls back, that call lands here (so use a clean, non-flagged number as your main line).</div>
+    </div>
+
+    <div class="setSection">
+      <h4>Phone Numbers</h4>
+      <div id="numberList" class="setNote">Loading…</div>
+      <div class="setRow" style="margin-top:10px">
+        <input type="text" id="newAreaCode" placeholder="State or area code, e.g. Mississippi or 228" style="width:260px">
+        <button id="searchNumbers">Search</button>
+      </div>
+      <div id="numberResults"></div>
+      <div class="setNote">A new local number is about $1.15/mo, billed to your Twilio balance. Buying one switches you to calling from it immediately — handy if a number ever picks up a "spam likely" flag from heavy dialing.</div>
+      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="assEnabled"> Match caller ID to the lead's state</label></div>
+      <div class="setNote">Assign a state to any number below. When this is on, calling a lead in that state automatically goes out from that number — a Florida lead sees your Florida number. Leads in unassigned states use your active number.</div>
+      <div id="assList"></div>
+    </div>
+
+    <div class="setSection">
+      <h4>Spam Registration</h4>
+      <div class="setNote" style="margin-bottom:10px">Carriers flag brand-new numbers as spam by default until they're registered as a real business. Register every number the same day you buy it, before you start dialing hard on it — registering after it's already flagged doesn't reliably undo the label.</div>
+      <div id="regBanner"></div>
+      <div id="regList" style="margin-top:8px"></div>
+      <div class="setNote" style="margin-top:8px">Both links are free. Free Caller Registry registers you with all three carrier networks at once; Hiya's dashboard lets you check the resulting reputation grade for a number after a few days of calling.</div>
+    </div>
+
+    <div class="setSection">
+      <h4>Auto-Dial Defaults</h4>
+      <div class="setRow">
+        <span>Default queue:</span>
+        <select id="defDefaultWho">
+          <option value="notReached">Haven't reached</option>
+          <option value="untouched">Never called</option>
+          <option value="all">Everyone</option>
+        </select>
+      </div>
+      <div class="setRow"><label><input type="checkbox" id="defSkipToday"> Skip anyone already called today, by default</label></div>
+      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="cadEnabled"> Retry cadence — rest each lead between attempts</label></div>
+      <div class="setRow" id="cadRow">
+        <label>Rest <input type="text" id="cadGaps" style="width:110px"> days</label>
+        <label style="margin-left:10px">Stop after <input type="number" id="cadMax" min="0" max="50" style="width:56px"> tries (0 = never)</label>
+      </div>
+      <div class="setNote">One rest per attempt, comma-separated: "1, 3, 7, 14" = after the 1st try the lead rests a day, after the 2nd it rests 3 days, then 7, then 14 for every try beyond (last number repeats). Resting leads leave the queue and resurface on their own — no manual re-filtering. Due callbacks always jump the fence, and "Stop after" archives never-reached leads once they've had that many dials.</div>
+      <div class="setRow"><label>Auto-advance delay <input type="number" id="advanceDelay" min="0" max="15"> sec after each disposition</label></div>
+      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="handsFree"> Hands-free dialing — auto-mark voicemail &amp; no-answer, only stop for live people</label></div>
+      <div class="setRow" id="attemptsRow"><label>Dial each lead <input type="number" id="attemptsPerLead" min="1" max="5" style="width:56px"> time(s) before moving on</label></div>
+      <div class="setNote">Dials one lead at a time with answering-machine detection. A machine pickup is auto-marked <b>Straight to Voicemail</b>, a full ring with no pickup is auto-marked <b>No Answer</b>, and it keeps going on its own — it only rings your browser (with a beep) when a <b>real person</b> answers. Walk away and come back when you hear the beep.</div>
+      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="parallelEnabled"> Dial 3 leads at once (raw parallel)</label></div>
+      <div class="setNote"><b>Currently limited by your Twilio account:</b> 3-at-once needs 4 simultaneous calls, and the account's concurrency cap blocks 2 of the 3 legs (they fail instantly). Until Twilio raises the limit, hands-free single-line above is the better mode. Also carries the TCPA abandoned-call tradeoff — if two people answer at once, one gets a silent hangup.</div>
+    </div>
+
+    <div class="setSection">
+      <h4>Calling Hours (auto-dial only)</h4>
+      <div class="setRow"><label><input type="checkbox" id="hoursEnabled"> Only auto-dial leads between</label>
+        <select id="hoursStart"></select> <span>and</span> <select id="hoursEnd"></select>
+        <span>their local time</span>
+      </div>
+      <div class="setNote">Federal telemarketing rules restrict calls to 8am–9pm in the <em>lead's</em> time zone. This filters the auto-dial queue only — the manual Call button always works, for callbacks and leads you already have permission to reach outside this window.</div>
+    </div>
+
+    <div class="setSection">
+      <h4>Dispositions</h4>
+      <div class="hint" style="margin-bottom:10px">"Reached" marks the lead as spoken-to (green dot) — this alone already keeps them out of the queue whenever Auto-Dial is set to "Haven't reached." "Skip in auto-dial" is a second, stronger filter: it removes that disposition's leads from the queue no matter which "who" option is selected. If a disposition is already marked Reached, toggling Skip usually won't change the count below — it's already excluded.</div>
+      <div class="setStatus" id="settingsQueueInfo" style="margin-bottom:10px"></div>
+      <div id="dispoList"></div>
+      <div id="addRow">
+        <input type="text" id="newDispoName" placeholder="New disposition name…">
+        <label class="optRow" style="margin:0"><input type="checkbox" id="newDispoContact"> Reached</label>
+        <button class="primary" id="addDispo">Add</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px; justify-content:flex-end">
+      <button id="closeModal">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="/twilio.min.js"></script>
+<script>
+// ---------- state ----------
+let leads = [], sel = null, device = null, activeCall = null, callerId = null;
+let config = { dispositions: null };
+const DEFAULT_SETTINGS = {
+  autoDial: { defaultWho: 'notReached', skipCalledToday: true, advanceDelaySec: 3, parallelEnabled: false, handsFree: true, attemptsPerLead: 1,
+    // retry cadence: gaps[n-1] = days a lead rests after its nth dial (last value repeats).
+    // maxAttempts 0 = never archive. Due callbacks always bypass the cadence.
+    cadence: { enabled: true, gaps: [1, 3, 7, 14], maxAttempts: 0 } },
+  callingHours: { enabled: true, startHour: 8, endHour: 21 },
+  callSettings: { ringTimeoutSec: 20, autoStateSwitch: { enabled: false, entries: [] }, numberRegistrations: {}, ringMyPhone: { enabled: false, number: '' } }
+};
+const FREE_CALLER_REGISTRY_URL = 'https://freecallerregistry.com';
+const HIYA_REPUTATION_URL = 'https://www.hiya.com/lp/caller-reputation';
+const US_STATES_LIST = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
+const STATE_NAME = { AL:'Alabama', AK:'Alaska', AZ:'Arizona', AR:'Arkansas', CA:'California', CO:'Colorado', CT:'Connecticut', DE:'Delaware', FL:'Florida', GA:'Georgia', HI:'Hawaii', ID:'Idaho', IL:'Illinois', IN:'Indiana', IA:'Iowa', KS:'Kansas', KY:'Kentucky', LA:'Louisiana', ME:'Maine', MD:'Maryland', MA:'Massachusetts', MI:'Michigan', MN:'Minnesota', MS:'Mississippi', MO:'Missouri', MT:'Montana', NE:'Nebraska', NV:'Nevada', NH:'New Hampshire', NJ:'New Jersey', NM:'New Mexico', NY:'New York', NC:'North Carolina', ND:'North Dakota', OH:'Ohio', OK:'Oklahoma', OR:'Oregon', PA:'Pennsylvania', RI:'Rhode Island', SC:'South Carolina', SD:'South Dakota', TN:'Tennessee', TX:'Texas', UT:'Utah', VT:'Vermont', VA:'Virginia', WA:'Washington', WV:'West Virginia', WI:'Wisconsin', WY:'Wyoming', DC:'Washington DC' };
+const ABBR_BY_NAME = Object.fromEntries(Object.entries(STATE_NAME).map(([a, n]) => [n.toUpperCase(), a]));
+function normState(s) {
+  s = String(s || '').trim().toUpperCase();
+  return US_STATES_LIST.includes(s) ? s : (ABBR_BY_NAME[s] || '');
+}
+function effectiveCallerId(lead) {
+  const ass = settings().callSettings.autoStateSwitch || {};
+  if (ass.enabled && lead) {
+    const st = normState(lead.state);
+    if (st) {
+      const m = (ass.entries || []).find(e => e.state === st && e.number);
+      if (m) return m.number;
+    }
+  }
+  return callerId || '';
+}
+const DEFAULT_DISPOS = [
+  { name: 'No Answer',      contact: false, color: 'gray',  exclude: false },
+  { name: 'Voicemail',      contact: false, color: 'gray',  exclude: false },
+  { name: 'Bad Number',     contact: false, color: 'red',   exclude: true  },
+  { name: 'Callback',       contact: true,  color: 'amber', exclude: false },
+  { name: 'Not Interested', contact: true,  color: 'red',   exclude: true  },
+  { name: 'Do Not Call',    contact: true,  color: 'red',   exclude: true  },
+  { name: 'Transferred',    contact: true,  color: 'green', exclude: false },
+  { name: 'Sold',           contact: true,  color: 'green', exclude: true  }
+];
+const STATUS_META = {
+  untouched: { label: 'New',     word: 'Never called' },
+  attempted: { label: 'Tried',   word: 'Called, not reached yet' },
+  contacted: { label: 'Reached', word: 'Spoken to' }
+};
+let statusFilter = '';               // '', 'untouched', 'attempted', 'contacted'
+let excludeSet = new Set();          // dispositions excluded from auto-dial
+const auto = { active: false, queue: [], idx: 0, timer: null, countLeft: 0, awaiting: false, _batchSize: 0, session: null, awaitingBridge: false, onLiveCall: false };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const $ = id => document.getElementById(id);
+const digits = p => String(p || '').replace(/\D/g, '');
+const e164 = p => { const d = digits(p); return d.length === 10 ? '+1' + d : d.length === 11 && d[0] === '1' ? '+' + d : '+' + d; };
+const fmtPhone = p => { const d = digits(p); return d.length >= 10 ? `(${d.slice(-10,-7)}) ${d.slice(-7,-4)}-${d.slice(-4)}` : p || ''; };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const stamp = d => { d = d ? new Date(d) : new Date(); return `${d.getMonth()+1}/${d.getDate()}`; };
+const calledToday = l => l.lastCalledAt && new Date(l.lastCalledAt).toDateString() === new Date().toDateString();
+
+// state → UTC offset guess (standard-ish; good enough for "their local time")
+const TZ = { MS:-5, AL:-5, LA:-5, TX:-5, TN:-5, AR:-5, MO:-5, OK:-5, IL:-5, WI:-5, MN:-5, IA:-5, KS:-5,
+  UT:-6, CO:-6, AZ:-7, NM:-6, ID:-6, MT:-6, WY:-6, NV:-7, CA:-7, WA:-7, OR:-7,
+  NY:-4, FL:-4, GA:-4, NC:-4, SC:-4, VA:-4, PA:-4, OH:-4, MI:-4, IN:-4, KY:-4, WV:-4, MD:-4, NJ:-4, CT:-4, MA:-4 };
+// normState first: leads imported with full state names ("Ohio") must hit the TZ map ("OH"),
+// otherwise they silently bypass calling-hours (3am dials!) and best-time scoring.
+function tzOffset(state) {
+  return TZ[normState(state) || String(state || '').toUpperCase()];
+}
+function localHour(state) {
+  const off = tzOffset(state);
+  if (off == null) return null;
+  const d = new Date(Date.now() + (off * 60 + new Date().getTimezoneOffset()) * 60000);
+  return d.getHours() + d.getMinutes() / 60;
+}
+function localTime(state) {
+  const off = tzOffset(state);
+  if (off == null) return '';
+  const d = new Date(Date.now() + (off * 60 + new Date().getTimezoneOffset()) * 60000);
+  let h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0'), ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ap}`;
+}
+
+function dispos() { return config.dispositions || DEFAULT_DISPOS; }
+function settings() {
+  return {
+    autoDial: Object.assign({}, DEFAULT_SETTINGS.autoDial, config.autoDial),
+    callingHours: Object.assign({}, DEFAULT_SETTINGS.callingHours, config.callingHours),
+    callSettings: Object.assign({}, DEFAULT_SETTINGS.callSettings, config.callSettings)
+  };
+}
+function contactSet() { return new Set(dispos().filter(d => d.contact).map(d => d.name)); }
+function dispoColor(name) { const d = dispos().find(x => x.name === name); return d ? d.color : 'gray'; }
+function logName(entry) { return entry.replace(/^\d+\/\d+\s*/, '').replace(/\s*×\d+$/, ''); }
+function statusOf(l) {
+  const cs = contactSet();
+  if (l.contacted === true || (l.log || []).some(e => cs.has(logName(e)))) return 'contacted';
+  if (l.lastCalledAt || (l.log || []).length || l.dialCount) return 'attempted';
+  return 'untouched';
+}
+// total times the lead was actually dialed (every ring counts, dispositioned or not).
+// Falls back to log length for leads imported before dialCount existed.
+function callCount(l) { return l.dialCount != null ? l.dialCount : (l.log || []).length; }
+// increment the real dial counter on every call attempt (manual, auto, or parallel)
+async function bumpDial(lead) {
+  if (!lead) return;
+  lead.dialCount = (lead.dialCount != null ? lead.dialCount : (lead.log || []).length) + 1;
+  lead.lastCalledAt = new Date().toISOString();
+  try { await patch(lead, { dialCount: lead.dialCount, lastCalledAt: lead.lastCalledAt }); } catch (e) {}
+}
+
+// ---------- call analytics (number health + best time to call) ----------
+// callStats mirrors calls.json: one row per dial {ts, leadId, state, number, mode, outcome}.
+// auto/parallel rows carry an AMD-verified outcome; 'manual' rows only count dial volume.
+let callStats = [];
+async function refreshCallStats() {
+  try { callStats = await api('/api/call-stats'); } catch (e) { callStats = []; }
+}
+function logCallEvent(lead, number, mode, outcome) {
+  // fire-and-forget; also append locally so stats stay live without a refetch
+  const entry = { ts: new Date().toISOString(), leadId: lead ? lead.id : null, state: lead ? (normState(lead.state) || null) : null, number: number || callerId || null, mode, outcome };
+  callStats.push(entry);
+  api('/api/call-log', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(entry) }).catch(() => {});
+}
+const RATED = o => ['human','voicemail','no-answer','busy'].includes(o); // outcomes that count toward answer rate
+// answer rate by the LEAD's local hour, from AMD-verified dials. Returns {hour: {dials, connects}}.
+function hourlyAnswerMap() {
+  const m = {};
+  for (const c of callStats) {
+    if (!RATED(c.outcome)) continue;
+    const off = tzOffset(c.state);
+    if (off == null) continue;
+    const d = new Date(new Date(c.ts).getTime() + (off * 60 + new Date().getTimezoneOffset()) * 60000);
+    const h = d.getHours();
+    m[h] = m[h] || { dials: 0, connects: 0 };
+    m[h].dials++;
+    if (c.outcome === 'human') m[h].connects++;
+  }
+  return m;
+}
+// per-caller-ID health over a trailing window
+function numberHealth() {
+  const now = Date.now(), day = 86400000;
+  const nums = {};
+  for (const c of callStats) {
+    if (!c.number) continue;
+    const age = now - new Date(c.ts).getTime();
+    if (age > 7 * day) continue;
+    const n = nums[c.number] = nums[c.number] || { dials7: 0, rated7: 0, connects7: 0, dialsToday: 0, ratedToday: 0, connectsToday: 0 };
+    n.dials7++;
+    if (RATED(c.outcome)) { n.rated7++; if (c.outcome === 'human') n.connects7++; }
+    if (new Date(c.ts).toDateString() === new Date().toDateString()) {
+      n.dialsToday++;
+      if (RATED(c.outcome)) { n.ratedToday++; if (c.outcome === 'human') n.connectsToday++; }
+    }
+  }
+  return nums;
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.json()).error || r.status);
+  return r.json();
+}
+function patch(l, fields) {
+  return api('/api/leads/' + l.id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(fields) });
+}
+
+// ---------- filtering ----------
+function filtered() {
+  const q = $('search').value.toLowerCase();
+  const dispo = $('dispoFilter').value;
+  const state = $('stateFilter').value;
+  const hide = $('hideCalledToday').checked;
+  return leads.filter(l => {
+    if (q && !searchHay(l).includes(q)) return false;
+    if (dispo && l.lastDispo !== dispo) return false;
+    if (state && String(l.state || '').toUpperCase() !== state) return false;
+    if (hide && calledToday(l)) return false;
+    if (statusFilter && statusOf(l) !== statusFilter) return false;
+    return true;
+  }).sort((a, b) => b.id - a.id); // newest imports (highest id) first
+}
+// searchable text for a lead: name/phone/email plus every imported custom field (city, zip, address…)
+function searchHay(l) {
+  const customVals = Object.values(l.custom || {}).join(' ');
+  return `${l.name} ${l.phone} ${l.email} ${customVals}`.toLowerCase();
+}
+function activeFilterCount() {
+  let n = 0;
+  if ($('search').value) n++;
+  if ($('dispoFilter').value) n++;
+  if ($('stateFilter').value) n++;
+  if ($('hideCalledToday').checked) n++;
+  if (statusFilter) n++;
+  return n;
+}
+window.clearFilters = () => {
+  $('search').value = '';
+  $('dispoFilter').value = '';
+  $('stateFilter').value = '';
+  $('hideCalledToday').checked = false;
+  statusFilter = '';
+  renderList();
+};
+
+// ---------- rendering ----------
+// initials + a stable hue derived from the name, so every lead gets a consistent identity color
+function initials(name) {
+  const p = String(name || '?').trim().split(/\s+/);
+  return (((p[0] || '')[0] || '?') + (p.length > 1 ? (p[p.length - 1][0] || '') : '')).toUpperCase();
+}
+function avHue(name) { let h = 0; for (const c of String(name || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 360; }
+function avatar(l, st, big) {
+  return `<span class="av ${st}${big ? ' big' : ''}" style="background:hsl(${avHue(l.name)},40%,47%)" title="${STATUS_META[st].word}">${esc(initials(l.name))}</span>`;
+}
+function renderSeg() {
+  const counts = { '': leads.length, untouched: 0, attempted: 0, contacted: 0 };
+  for (const l of leads) counts[statusOf(l)]++;
+  $('statusSeg').innerHTML = [['', 'All'], ['untouched', 'New'], ['attempted', 'Tried'], ['contacted', 'Reached']]
+    .map(([v, label]) => `<button class="${statusFilter === v ? 'on' : ''}" onclick="setStatusFilter('${v}')">${label} ${counts[v]}</button>`).join('');
+}
+window.setStatusFilter = v => { statusFilter = v; renderList(); };
+
+function renderList() {
+  renderSeg();
+  const rows = filtered();
+  $('count').textContent = `${rows.length} of ${leads.length}`;
+  $('leadList').innerHTML = rows.map(l => {
+    const st = statusOf(l);
+    const lt = localTime(l.state);
+    return `
+    <div class="leadRow ${sel && sel.id === l.id ? 'sel' : ''}" onclick="select(${l.id})">
+      ${avatar(l, st)}
+      <div class="mid">
+        <div class="nm">${esc(l.name)}</div>
+        <div class="sub">${fmtPhone(l.phone)} · ${esc(l.state || '?')}${lt ? ' · ' + lt : ''}</div>
+      </div>
+      <div class="right">
+        ${l.blocked ? '<span class="chip red">blocked</span>' : l.lastDispo ? `<span class="chip ${['green','amber','red'].includes(dispoColor(l.lastDispo)) ? dispoColor(l.lastDispo) : 'gray'}">${esc(l.lastDispo)}</span>` : ''}
+        <div>${l.lastCalledAt ? 'called ' + stamp(l.lastCalledAt) : ''}${callCount(l) ? ' · ' + callCount(l) + 'x' : ''}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div id="empty">No leads match.</div>';
+  // filter dropdown: configured dispositions first (in Settings order), then any legacy
+  // tags still sitting on old leads (e.g. from a Ringy import) that aren't configured anymore
+  const configNames = dispos().map(d => d.name);
+  const usedNames = new Set(leads.map(l => l.lastDispo).filter(Boolean));
+  const legacyNames = [...usedNames].filter(n => !configNames.includes(n)).sort();
+  const df = $('dispoFilter'); const cur = df.value;
+  df.innerHTML = '<option value="">All dispositions</option>'
+    + configNames.map(d => `<option ${d===cur?'selected':''}>${esc(d)}</option>`).join('')
+    + (legacyNames.length ? '<option disabled>── legacy (not in Settings) ──</option>' + legacyNames.map(d => `<option ${d===cur?'selected':''}>${esc(d)}</option>`).join('') : '');
+  const stateCounts = {};
+  for (const l of leads) { const s = String(l.state || '').toUpperCase(); if (s) stateCounts[s] = (stateCounts[s] || 0) + 1; }
+  const sf = $('stateFilter'); const curState = sf.value;
+  sf.innerHTML = '<option value="">All states</option>' + Object.entries(stateCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `<option value="${s}" ${s===curState?'selected':''}>${s} (${n})</option>`).join('');
+  $('clearFilters').style.display = activeFilterCount() ? 'inline' : 'none';
+  renderDueStrip();
+  updateQueueInfo();
+}
+
+function emptyStateHtml() {
+  if (!leads.length) return `<div id="empty">Welcome. Get your leads in first —<br>click <b>Import</b> for a CSV, or <b>+ Add Lead</b> for one at a time.</div>`;
+  return `<div id="empty">Pick a lead, or press ▶ Start Auto-Dial.
+  </div>`;
+}
+// custom-field keys that matter on a sales call, in display order; everything else folds
+// into a collapsed "More details" so the profile isn't a wall of vendor junk (IPs, form URLs…)
+const FACT_ORDER = ['age', 'gender', 'beneficiary', 'beneficiary name', 'smoker', 'premium', 'face amount',
+  'amount requested', 'coverage amount', 'selected plan', 'selected carrier', 'have life insurance', 'why', 'goal',
+  'household income', 'bmi', 'blood pressure', 'blood pressure meds', 'cholesterol', 'heart attack stroke or cancer',
+  'lead type', 'hobby', 'interested in'];
+function buildProfile(l) {
+  const custom = l.custom || {};
+  const used = new Set();
+  const take = (...names) => {
+    for (const k of Object.keys(custom)) {
+      if (names.includes(k.toLowerCase().trim()) && !used.has(k) && String(custom[k]).trim()) {
+        used.add(k); return String(custom[k]).trim();
+      }
+    }
+    return '';
+  };
+  // address block — street / "City, ST Zip" on two lines like a mailing label, with a maps link
+  const street = take('address', 'street', 'street address');
+  const city = take('city');
+  const zip = take('zip', 'zip code', 'postal code');
+  const county = take('county');
+  const stAbbr = normState(l.state) || (l.state || '');
+  const line2 = [city, [stAbbr, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  let addr = '';
+  if (street || city) { // state alone isn't an address — it's already in the header
+    const q = encodeURIComponent([street, city, stAbbr, zip].filter(Boolean).join(', '));
+    addr = `<div class="addrCard"><div class="lbl">Address</div>
+      ${street ? esc(street) + '<br>' : ''}${esc(line2)}
+      ${county ? `<br><span style="color:var(--dim)">${esc(county)} County</span>` : ''}
+      ${q ? `<br><a href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">📍 Map</a>` : ''}</div>`;
+  }
+  // curated facts, in a fixed useful order
+  const lower = {};
+  for (const k of Object.keys(custom)) lower[k.toLowerCase().trim()] = k;
+  const facts = [];
+  for (const want of FACT_ORDER) {
+    const k = lower[want];
+    if (k && !used.has(k) && String(custom[k]).trim()) {
+      used.add(k);
+      facts.push(`<div class="fact"><div class="lbl">${esc(k)}</div><div class="val">${esc(custom[k])}</div></div>`);
+    }
+  }
+  // everything left (vendor tracking junk, dupes like AGE) → collapsed
+  const rest = Object.entries(custom).filter(([k, v]) => !used.has(k) && String(v).trim());
+  return `
+    ${addr || facts.length ? `<div class="profileCards">${addr}${facts.length ? `<div class="factsCard">${facts.join('')}</div>` : ''}</div>` : ''}
+    ${rest.length ? `<details class="moreFields"><summary>More details (${rest.length})</summary><div class="fields">${rest.map(([k, v]) => `<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}</div></details>` : ''}`;
+}
+// ---------- workup (application capture, Ringy-style tabs) ----------
+// Stored as lead.workup (nested object on the lead). SSN/DL/banking are
+// encrypted server-side at rest and masked in the UI (password inputs + reveal toggle).
+let workupTab = 'client', workupReveal = false, wSaveTimer = null;
+const W_SENSITIVE = new Set(['client.ssn', 'client.dl', 'client.bank', 'client.routing', 'client.account', 'client2.ssn', 'client2.dl']);
+function wGet(w, path) { return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), w) || ''; }
+function wIn(w, path, label, wide) {
+  const sens = W_SENSITIVE.has(path);
+  return `<label class="wField"${wide ? ' style="grid-column:span 2"' : ''}><span>${label}</span><input data-w="${path}" type="${sens && !workupReveal ? 'password' : 'text'}" value="${esc(wGet(w, path))}" autocomplete="off"></label>`;
+}
+function wRows(w, sec, n, cols) {
+  let h = '';
+  for (let i = 0; i < n; i++) h += `<div class="wGrid">${cols.map(([k, lbl]) => wIn(w, `${sec}.${i}.${k}`, lbl + (n > 1 ? ` ${i + 1}` : ''))).join('')}</div>`;
+  return h;
+}
+const HEALTH_COLS = [['diagnosis', 'Diagnosis'], ['date', 'Date'], ['med1', 'Med 1'], ['med2', 'Med 2'], ['med3', 'Med 3']];
+function buildWorkup(l) {
+  const w = l.workup || {};
+  const tabs = [['client', 'Client Info'], ['health', 'Health'], ['financial', 'Financial'], ['bene', 'Beneficiary'], ['client2', 'Client 2']];
+  let pane = '';
+  if (workupTab === 'client') pane = `
+    <div class="wGrid">${[['dob','DOB'],['height','Height'],['weight','Weight'],['smoker','Smoker'],['born','Born']].map(([k,lbl]) => wIn(w, 'client.'+k, lbl)).join('')}</div>
+    <div class="wGrid">${wIn(w, 'client.address', 'Address', true)}${[['city','City'],['state','State'],['zip','Zip']].map(([k,lbl]) => wIn(w, 'client.'+k, lbl)).join('')}</div>
+    <div class="wGrid">${[['ssn','SS#'],['dl','DL#'],['bank','Bank'],['routing','Routing'],['account','Account']].map(([k,lbl]) => wIn(w, 'client.'+k, lbl)).join('')}</div>
+    <div class="wGrid">${[['effDate','EFF Date'],['draftDate','Monthly Draft Date']].map(([k,lbl]) => wIn(w, 'client.'+k, lbl)).join('')}</div>
+    <div class="wNote">🔒 SS#, DL# and banking are encrypted at rest and masked on screen — use 👁 to reveal while filling the carrier app.</div>`;
+  else if (workupTab === 'health') pane = wRows(w, 'health', 5, HEALTH_COLS);
+  else if (workupTab === 'financial') pane = `
+    <div class="wGrid">${[['mortgage','Mortgage'],['rent','Rent'],['monthly','Monthly'],['years','Years'],['equity','Equity']].map(([k,lbl]) => wIn(w, 'financial.'+k, lbl)).join('')}</div>
+    <div class="wGrid">${[['job','Job'],['income','Income'],['retirement','Retirement']].map(([k,lbl]) => wIn(w, 'financial.'+k, lbl)).join('')}</div>`;
+  else if (workupTab === 'bene') pane = wRows(w, 'bene', 3, [['name', 'Beneficiary'], ['dob', 'DOB'], ['percentage', 'Percentage'], ['relationship', 'Relationship'], ['phone', 'Phone #']]);
+  else if (workupTab === 'client2') pane = `
+    <div class="wGrid">${[['name','Name'],['dob','DOB'],['height','Height'],['weight','Weight'],['smoker','Smoker'],['born','Born']].map(([k,lbl]) => wIn(w, 'client2.'+k, lbl)).join('')}</div>
+    ${wRows(w, 'client2health', 3, HEALTH_COLS)}
+    <div class="wGrid">${[['ssn','SS#'],['dl','DL#']].map(([k,lbl]) => wIn(w, 'client2.'+k, lbl)).join('')}</div>`;
+  return `<div id="workup">
+    <div class="wTabs">${tabs.map(([k, lbl]) => `<button class="${workupTab === k ? 'on' : ''}" onclick="wTab('${k}')">${lbl}</button>`).join('')}
+      <div class="wRight"><button onclick="wToggleReveal()" title="Show/hide SS#, DL# and banking">${workupReveal ? '🙈 Hide' : '👁 Reveal'}</button></div>
+    </div>
+    <div class="wPane">${pane}</div>
+    <div id="wSave"></div>
+  </div>`;
+}
+function collectWorkup() {
+  const w = sel && sel.workup ? JSON.parse(JSON.stringify(sel.workup)) : {};
+  document.querySelectorAll('#workup [data-w]').forEach(inp => {
+    const parts = inp.dataset.w.split('.');
+    let o = w;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i], nextIsIdx = /^\d+$/.test(parts[i + 1]);
+      if (o[key] == null) o[key] = nextIsIdx ? [] : {};
+      o = o[key];
+    }
+    o[parts[parts.length - 1]] = inp.value;
+  });
+  return w;
+}
+let wSavePending = false;
+async function saveWorkupNow() {
+  clearTimeout(wSaveTimer);
+  wSavePending = false;
+  if (!sel || !document.querySelector('#workup')) return;
+  const w = collectWorkup();
+  sel.workup = w;
+  try { await patch(sel, { workup: w }); const s = $('wSave'); if (s) { s.textContent = 'saved'; setTimeout(() => { if ($('wSave')) $('wSave').textContent = ''; }, 1200); } } catch (e) {}
+}
+window.wTab = async k => { await saveWorkupNow(); workupTab = k; renderDetail(); };
+window.wToggleReveal = async () => { await saveWorkupNow(); workupReveal = !workupReveal; renderDetail(); };
+function renderDetail() {
+  if (!sel) { $('detail').innerHTML = emptyStateHtml(); return; }
+  const l = sel;
+  const st = statusOf(l);
+  const extras = buildProfile(l) + buildWorkup(l);
+  const lt = localTime(l.state);
+  $('detail').innerHTML = `
+    <div class="top">
+      <div class="topId">
+      ${avatar(l, st, true)}
+      <div>
+        <h2>${esc(l.name)}</h2>
+        <a id="phoneBig" href="tel:${e164(l.phone)}">${fmtPhone(l.phone)}</a>
+        <div class="meta">${esc(l.email || '')} ${l.state ? '· ' + esc(l.state) : ''}${lt ? ' · their time: ' + lt : ''} ${l.birthday ? '· b. ' + esc(l.birthday) : ''}</div>
+        <div class="meta">${l.vendor ? esc(l.vendor) : ''} ${l.receivedOn ? '· received ' + stamp(l.receivedOn) : ''}</div>
+        <div class="statusPill ${st}"><span class="dot ${st}"></span>${STATUS_META[st].word}
+          ${st !== 'contacted' ? `<a onclick="markContacted(true)" title="Mark as spoken to">· mark reached</a>` : (l.contacted === true ? `<a onclick="markContacted(null)" title="Undo manual mark">· undo</a>` : '')}
+          ${callCount(l) ? `<span style="margin-left:8px;color:var(--dim)">· called ${callCount(l)}x</span>` : ''}
+          ${!l.blocked ? `<a onclick="toggleBlocked()" title="Mark do-not-call — keeps the lead but blocks dialing" style="margin-left:8px;color:var(--dim)">· block</a>` : ''}
+          ${l.clientId ? `<a onclick="openClientDetail(${l.clientId});$('clientsModal').style.display='flex'" title="This lead is a client" style="margin-left:8px;color:var(--dim)">· 🏆 view client</a>`
+            : `<a onclick="convertLeadToClient()" title="Log this lead as a sold client + policy" style="margin-left:8px;color:var(--dim)">· 🏆 convert to client</a>`}
+        </div>
+        ${l.blocked ? `<div class="statusPill" style="background:rgba(217,92,92,.15);color:#f0a0a0;margin-left:8px">⛔ Blocked (do not call) <a onclick="toggleBlocked()" title="Unblock">· unblock</a></div>` : ''}
+        ${l.callbackAt ? `<div class="statusPill" style="background:var(--chip-amber-bg);color:var(--chip-amber-text);margin-top:6px">📅 Callback ${fmtCbTime(l.callbackAt)}${l.callbackNote ? ` — ${esc(l.callbackNote)}` : ''} <a onclick="clearCallback()" title="Remove this scheduled callback">· clear</a></div>` : ''}
+      </div>
+      </div>
+      <div class="navBtns">
+        <button onclick="nav(-1)">↑ Prev</button>
+        <button onclick="nav(1)">↓ Next</button>
+        <button onclick="deleteLead()" title="Delete this lead permanently" style="color:var(--dim)">🗑</button>
+      </div>
+    </div>
+    <div id="callBar">
+      <button class="good" id="callBtn" onclick="startCall()" style="display:${activeCall ? 'none' : ''}">📞 Call</button>
+      <button id="muteBtn" onclick="toggleMute()" style="display:${activeCall ? '' : 'none'}">${activeCall && activeCall.isMuted() ? '🔇 Muted' : '🎙 Mute'}</button>
+      <button class="danger" id="hangupBtn" onclick="hangUp()" style="display:${activeCall ? '' : 'none'}">Hang up</button>
+      <span id="callStatus">${device ? 'ready' : 'Twilio not configured — the phone link above still works'}</span>
+    </div>
+    <div id="dispoBar">
+      ${dispos().map(d => `<button class="c${d.color[0].toUpperCase() + d.color.slice(1)}" onclick="dispo('${esc(d.name)}')">${esc(d.name)}</button>`).join('')}
+    </div>
+    <div id="dispoHint"></div>
+    <textarea id="notes" placeholder="Notes…">${esc(l.notes || '')}</textarea>
+    <div id="saveState"></div>
+    ${extras}
+    <div id="log">${(l.log || []).length ? '<h4>Call history</h4>' : ''}${(l.log || []).slice().reverse().map((e, ri) => {
+      const i = (l.log || []).length - 1 - ri;
+      return `<div class="entry"><button class="ghost" title="Remove this entry" onclick="removeLog(${i})">✕</button><span>${esc(e)}</span></div>`;
+    }).join('')}</div>
+  `;
+  const wu = document.getElementById('workup');
+  if (wu) wu.addEventListener('input', () => {
+    clearTimeout(wSaveTimer);
+    wSavePending = true;
+    const s = $('wSave'); if (s) s.textContent = '…';
+    wSaveTimer = setTimeout(saveWorkupNow, 600);
+  });
+  let t;
+  $('notes').addEventListener('input', () => {
+    clearTimeout(t);
+    $('saveState').textContent = '…';
+    t = setTimeout(async () => {
+      l.notes = $('notes').value;
+      await patch(l, { notes: l.notes });
+      $('saveState').textContent = 'saved';
+      setTimeout(() => { const s = $('saveState'); if (s) s.textContent = ''; }, 1200);
+    }, 600);
+  });
+  if (auto.active && auto.awaiting) {
+    $('dispoBar').classList.add('attention');
+    $('dispoHint').textContent = 'Pick a disposition to continue auto-dialing →';
+  }
+}
+
+function nav(dir) {
+  const rows = filtered();
+  const i = rows.findIndex(r => sel && r.id === sel.id);
+  const next = rows[i + dir] || rows[0];
+  if (next) select(next.id);
+}
+function select(id) {
+  if (wSavePending) saveWorkupNow(); // flush unsaved workup edits before the pane re-renders
+  sel = leads.find(l => l.id === id);
+  renderList(); renderDetail();
+  const el = document.querySelector('.leadRow.sel');
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+window.nav = nav; window.select = select;
+
+async function markContacted(v) {
+  sel.contacted = v;
+  await patch(sel, { contacted: v });
+  renderList(); renderDetail();
+}
+window.markContacted = markContacted;
+
+async function toggleBlocked() {
+  if (!sel.blocked && !confirm(`Block ${sel.name}? They stay in your list but won't be dialed (auto-dial skips them).`)) return;
+  sel.blocked = !sel.blocked;
+  await patch(sel, { blocked: sel.blocked });
+  renderList(); renderDetail();
+}
+window.toggleBlocked = toggleBlocked;
+
+async function deleteLead() {
+  if (!sel) return;
+  if (!confirm(`Delete ${sel.name} permanently? Their call history goes with them. (If they asked not to be called, use block instead — it keeps the record.)`)) return;
+  const id = sel.id;
+  await api('/api/leads/' + id, { method: 'DELETE' });
+  leads = leads.filter(l => l.id !== id);
+  sel = null;
+  renderList(); renderDetail();
+}
+window.deleteLead = deleteLead;
+
+async function removeLog(i) {
+  const l = sel;
+  l.log.splice(i, 1);
+  l.lastDispo = l.log.length ? logName(l.log[l.log.length - 1]) : null;
+  if (!l.log.length) l.lastCalledAt = l.lastCalledAt; // keep the timestamp; history stays honest
+  await patch(l, { log: l.log, lastDispo: l.lastDispo });
+  renderList(); renderDetail();
+}
+window.removeLog = removeLog;
+
+// ---------- dispositions ----------
+// A "Callback" disposition opens the scheduling popover first; everything else applies directly.
+async function dispo(tag) {
+  if (!sel) return;
+  if (/callback/i.test(tag)) return openCbModal(tag);
+  applyDispo(tag);
+}
+async function applyDispo(tag, cb) {
+  if (!sel) return;
+  const l = sel;
+  l.lastDispo = tag;
+  l.lastCalledAt = new Date().toISOString();
+  l.log = l.log || [];
+  l.log.push(`${stamp()} ${tag}`);
+  const upd = { lastDispo: l.lastDispo, lastCalledAt: l.lastCalledAt, log: l.log };
+  if (cb) { // scheduling a new callback
+    l.callbackAt = upd.callbackAt = cb.at;
+    l.callbackNote = upd.callbackNote = cb.note || '';
+  } else if (l.callbackAt) {
+    // clear an existing callback if you actually spoke to them (promise consumed),
+    // or if it was already due (this call WAS the callback). A future promise
+    // survives an unrelated early no-answer.
+    const d = dispos().find(x => x.name === tag);
+    if ((d && d.contact) || new Date(l.callbackAt) <= new Date()) {
+      l.callbackAt = upd.callbackAt = null;
+      l.callbackNote = upd.callbackNote = null;
+    }
+  }
+  await patch(l, upd);
+  if (activeCall) hangUp();
+  renderList(); renderDetail();
+  if (auto.active) autoAdvance();
+}
+window.dispo = dispo;
+
+// ---------- callback scheduling ----------
+let cbPendingTag = null;
+const toLocalInput = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+function cbPresetDate(k) {
+  const d = new Date();
+  if (k === '1h') { d.setHours(d.getHours() + 1, 0, 0, 0); return d; }
+  d.setDate(d.getDate() + 1);
+  d.setHours(k === 'tmrw-am' ? 9 : 14, 0, 0, 0);
+  return d;
+}
+function openCbModal(tag) {
+  cbPendingTag = tag;
+  $('cbWho').textContent = sel ? `${sel.name} — when should they hear from you?` : '';
+  $('cbWhen').value = '';
+  $('cbNote').value = '';
+  $('cbStatus').textContent = '';
+  document.querySelectorAll('.cbPresets button').forEach(b => b.classList.remove('on'));
+  $('cbModal').style.display = 'flex';
+}
+function closeCbModal() { $('cbModal').style.display = 'none'; cbPendingTag = null; }
+document.querySelectorAll('.cbPresets button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.cbPresets button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  $('cbWhen').value = toLocalInput(cbPresetDate(b.dataset.preset));
+});
+$('cbSave').onclick = async () => {
+  const v = $('cbWhen').value;
+  if (!v) { $('cbStatus').textContent = 'Pick a time (or tap a preset)'; return; }
+  const at = new Date(v);
+  if (at <= new Date()) { $('cbStatus').textContent = 'That time is in the past'; return; }
+  const tag = cbPendingTag;
+  const note = $('cbNote').value.trim();
+  closeCbModal();
+  await applyDispo(tag, { at: at.toISOString(), note });
+};
+$('cbCloseBtn').onclick = closeCbModal;
+$('cbModal').addEventListener('click', e => { if (e.target.id === 'cbModal') closeCbModal(); });
+async function clearCallback() {
+  if (!sel || !sel.callbackAt) return;
+  sel.callbackAt = null; sel.callbackNote = null;
+  await patch(sel, { callbackAt: null, callbackNote: null });
+  renderList(); renderDetail();
+}
+window.clearCallback = clearCallback;
+
+const fmtCbTime = ts => {
+  const d = new Date(ts), now = new Date();
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
+  return d.toDateString() === now.toDateString() ? t : `${d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })} ${t}`;
+};
+// the strip shows overdue promises + everything due before end of today
+function renderDueStrip() {
+  const el = $('dueStrip'); if (!el) return;
+  const now = new Date();
+  const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+  const due = leads.filter(l => l.callbackAt && new Date(l.callbackAt) <= endOfDay)
+    .sort((a, b) => new Date(a.callbackAt) - new Date(b.callbackAt));
+  if (!due.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = `<div class="dueHead">📅 Callbacks due today (${due.length})</div>` + due.map(l => {
+    const late = new Date(l.callbackAt) < now;
+    return `<div class="dueItem ${late ? 'late' : ''}" onclick="select(${l.id})">
+      <span>${esc(l.name)}${l.callbackNote ? ` <span style="color:var(--dim)">— ${esc(l.callbackNote)}</span>` : ''}</span>
+      <span class="t">${late ? 'overdue · ' : ''}${fmtCbTime(l.callbackAt)}</span>
+    </div>`;
+  }).join('');
+}
+setInterval(renderDueStrip, 60000); // roll "upcoming" into "overdue" as time passes
+
+// Single-key hotkeys (1-9/n/c/m) were removed July 2026 — Cmd+C to copy a phone number or
+// address (plain text, not an input, so the old input-focus guard never caught it) fired the
+// 'c' handler underneath and hung up a live call. Only Escape-to-close-modal remains: it's a
+// dedicated key nobody hits mid copy/paste, unlike single letters.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('cbModal').style.display === 'flex') return closeCbModal();
+  if ($('dialerModal').style.display === 'flex') return closeDialer();
+  if ($('addLeadModal').style.display === 'flex') return closeAddLead();
+  if ($('modal').style.display === 'flex') return $('closeModal').click();
+  if ($('dashModal').style.display === 'flex') { $('dashModal').style.display = 'none'; return; }
+  if (/INPUT|TEXTAREA/.test(e.target.tagName)) e.target.blur();
+});
+
+// ---------- settings modal ----------
+function populateHourSelects() {
+  const opt = h => { const ap = h === 0 ? '12am' : h < 12 ? h + 'am' : h === 12 ? '12pm' : (h - 12) + 'pm'; return `<option value="${h}">${ap}</option>`; };
+  const html = Array.from({ length: 24 }, (_, h) => opt(h)).join('');
+  $('hoursStart').innerHTML = html; $('hoursEnd').innerHTML = html;
+}
+function renderCallerIdStatus() {
+  $('callerIdStatus').innerHTML = device
+    ? `<span class="setStatus">Calling as <b>${esc(fmtPhone(callerId || ''))}</b>.</span>`
+    : `<span class="setStatus" style="color:var(--amber)">Twilio isn't configured — Call falls back to tel: links. Run <em>Setup Calling</em> to enable auto-dial.</span>`;
+}
+async function loadNumbers() {
+  if (!device) { $('numberList').innerHTML = '<span class="setNote">Set up calling first (run Setup Calling) to manage numbers here.</span>'; return; }
+  try {
+    const list = await api('/api/twilio/numbers');
+    $('numberList').innerHTML = list.length ? list.map(n => `
+      <div class="setRow">
+        <label style="flex:1"><input type="radio" name="activeNum" value="${esc(n.phoneNumber)}" ${n.active ? 'checked' : ''} onchange="setActiveNumber('${esc(n.phoneNumber)}')"> ${esc(fmtPhone(n.phoneNumber))}${n.friendlyName ? ' — ' + esc(n.friendlyName) : ''}</label>
+        ${n.active ? '<span class="chip green">active</span>' : ''}
+      </div>`).join('') : '<span class="setNote">No numbers yet — search below to buy one.</span>';
+    renderStateSwitch(list);
+    renderRegistrations(list);
+  } catch (e) { $('numberList').innerHTML = '<span class="setNote">Couldn\'t load numbers — ' + esc(e.message) + '</span>'; }
+}
+function regMap() { return settings().callSettings.numberRegistrations || {}; }
+function renderRegistrations(list) {
+  const el = $('regList');
+  if (!el) return;
+  const regs = regMap();
+  const unregistered = (list || []).filter(n => !regs[n.phoneNumber] || !regs[n.phoneNumber].registered);
+  $('regBanner').innerHTML = unregistered.length
+    ? `<div class="setStatus" style="color:var(--amber);border-color:var(--chip-amber-border);background:var(--chip-amber-bg)">⚠ ${unregistered.length} number${unregistered.length === 1 ? '' : 's'} not yet registered — register before heavy dialing, or it's likely to get spam-flagged fast.</div>`
+    : (list && list.length ? `<div class="setStatus" style="color:var(--green)">✓ All numbers registered.</div>` : '');
+  el.innerHTML = (list || []).map(n => {
+    const r = regs[n.phoneNumber] || {};
+    return `<div class="setRow" style="align-items:flex-start">
+      <label style="flex:1;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" ${r.registered ? 'checked' : ''} onchange="toggleRegistered('${esc(n.phoneNumber)}', this.checked)">
+        <span>${esc(fmtPhone(n.phoneNumber))}${r.registered && r.date ? ` <span class="setNote" style="display:inline">— registered ${stamp(r.date)}</span>` : ''}</span>
+      </label>
+      <a href="${FREE_CALLER_REGISTRY_URL}" target="_blank" rel="noopener" class="setNote" style="text-decoration:underline">Register free →</a>
+      <a href="${HIYA_REPUTATION_URL}" target="_blank" rel="noopener" class="setNote" style="text-decoration:underline;margin-left:10px">Check reputation →</a>
+    </div>`;
+  }).join('');
+}
+window.toggleRegistered = (num, checked) => {
+  const regs = Object.assign({}, regMap());
+  regs[num] = checked ? { registered: true, date: new Date().toISOString() } : { registered: false, date: null };
+  config.callSettings = Object.assign({}, settings().callSettings, { numberRegistrations: regs });
+  saveConfig();
+  loadNumbers();
+};
+function renderStateSwitch(list) {
+  const ass = settings().callSettings.autoStateSwitch || { enabled: false, entries: [] };
+  $('assEnabled').checked = !!ass.enabled;
+  $('assList').innerHTML = (list || []).map(n => {
+    const cur = (ass.entries || []).find(e => e.number === n.phoneNumber);
+    return `<div class="setRow">
+      <span style="flex:1">${esc(fmtPhone(n.phoneNumber))}</span>
+      <select onchange="setNumberState('${esc(n.phoneNumber)}', this.value)">
+        <option value="">Not assigned</option>
+        ${US_STATES_LIST.map(s => `<option value="${s}" ${cur && cur.state === s ? 'selected' : ''}>${STATE_NAME[s]}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+}
+function saveStateSwitch(patch) {
+  const cs = settings().callSettings;
+  const ass = Object.assign({ enabled: false, entries: [] }, cs.autoStateSwitch, patch);
+  config.callSettings = Object.assign({}, cs, { autoStateSwitch: ass });
+  saveConfig();
+}
+window.setNumberState = (num, st) => {
+  const cur = settings().callSettings.autoStateSwitch || {};
+  const entries = (cur.entries || []).filter(e => e.number !== num);
+  if (st) entries.push({ number: num, state: st });
+  saveStateSwitch({ entries });
+};
+$('assEnabled').addEventListener('change', e => saveStateSwitch({ enabled: e.target.checked }));
+window.setActiveNumber = async num => {
+  await api('/api/twilio/active', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num }) });
+  config.callSettings = Object.assign({}, settings().callSettings, { callerId: num });
+  callerId = num;
+  renderCallerIdStatus();
+  loadNumbers();
+};
+$('searchNumbers').onclick = async () => {
+  const q = $('newAreaCode').value.trim();
+  if (!q) return;
+  $('numberResults').innerHTML = '<span class="setNote">Searching…</span>';
+  try {
+    const results = await api('/api/twilio/available?q=' + encodeURIComponent(q));
+    $('numberResults').innerHTML = results.length ? results.map(n => `
+      <div class="setRow">
+        <span style="flex:1">${esc(fmtPhone(n.phoneNumber))}${n.locality ? ' — ' + esc(n.locality) + ', ' + esc(n.region) : ''}</span>
+        <button class="primary" style="padding:6px 12px;font-size:12.5px" onclick="buyNumber('${esc(n.phoneNumber)}')">Buy — ~$1.15/mo</button>
+      </div>`).join('') : '<span class="setNote">No numbers found for "' + esc(q) + '".</span>';
+  } catch (e) { $('numberResults').innerHTML = '<span class="setNote">' + esc(e.message) + '</span>'; }
+};
+$('newAreaCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('searchNumbers').click(); });
+window.buyNumber = async num => {
+  if (!confirm(`Buy ${fmtPhone(num)} for about $1.15/month, billed to your Twilio balance?`)) return;
+  try {
+    await api('/api/twilio/numbers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num }) });
+    config.callSettings = Object.assign({}, settings().callSettings, { callerId: num });
+    callerId = num;
+    $('numberResults').innerHTML = ''; $('newAreaCode').value = '';
+    renderCallerIdStatus();
+    loadNumbers();
+  } catch (e) { alert('Purchase failed: ' + e.message); }
+};
+function openSettings() {
+  const s = settings();
+  renderCallerIdStatus();
+  loadNumbers();
+  $('ringTimeout').value = s.callSettings.ringTimeoutSec;
+  const rmp = s.callSettings.ringMyPhone || { enabled: false, number: '' };
+  $('rmpEnabled').checked = !!rmp.enabled;
+  $('rmpNumber').value = rmp.number || '';
+  $('rmpNumRow').style.display = rmp.enabled ? '' : 'none';
+  $('defDefaultWho').value = s.autoDial.defaultWho;
+  $('defSkipToday').checked = s.autoDial.skipCalledToday;
+  const cad = s.autoDial.cadence || { enabled: false, gaps: [1, 3, 7, 14], maxAttempts: 0 };
+  $('cadEnabled').checked = !!cad.enabled;
+  $('cadGaps').value = (cad.gaps || []).join(', ');
+  $('cadMax').value = cad.maxAttempts || 0;
+  $('cadRow').style.display = cad.enabled ? '' : 'none';
+  $('advanceDelay').value = s.autoDial.advanceDelaySec;
+  $('parallelEnabled').checked = !!s.autoDial.parallelEnabled;
+  $('handsFree').checked = !!s.autoDial.handsFree;
+  $('attemptsPerLead').value = s.autoDial.attemptsPerLead || 1;
+  $('attemptsRow').style.display = s.autoDial.handsFree ? '' : 'none';
+  populateHourSelects();
+  $('hoursEnabled').checked = s.callingHours.enabled;
+  $('hoursStart').value = s.callingHours.startHour;
+  $('hoursEnd').value = s.callingHours.endHour;
+  renderDispoList();
+  renderSettingsQueueInfo();
+  loadInboundStatus();
+  $('modal').style.display = 'flex';
+}
+async function loadInboundStatus() {
+  const el = $('inboundStatus');
+  if (!device) { el.textContent = 'Set up calling first to enable inbound.'; return; }
+  try {
+    const s = await api('/api/twilio/inbound-status');
+    if (s.enabled && (s.inboundNumbers || []).length) {
+      el.innerHTML = 'On — incoming calls to ' + s.inboundNumbers.map(n => fmtPhone(n)).join(', ') + ' ring this app.';
+      $('enableInbound').textContent = 'Re-apply inbound routing';
+    } else {
+      el.textContent = 'Off — incoming calls to your numbers are not routed here yet.';
+      $('enableInbound').textContent = 'Ring my browser on incoming calls';
+    }
+  } catch (e) { el.textContent = 'Could not check inbound status.'; }
+}
+$('enableInbound').onclick = async () => {
+  const btn = $('enableInbound');
+  btn.disabled = true; btn.textContent = 'Setting up… (deploys + updates numbers, ~15s)';
+  try {
+    const r = await api('/api/twilio/enable-inbound', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    if (r.error) throw new Error(r.error);
+    alert('Inbound enabled. These numbers now ring this app:\n' + (r.configured || []).map(fmtPhone).join('\n') + '\n\nMake a test call to one of them.');
+  } catch (e) { alert('Inbound setup failed: ' + e.message); }
+  btn.disabled = false;
+  loadInboundStatus();
+};
+$('settingsBtn').onclick = openSettings;
+$('closeModal').onclick = () => { $('modal').style.display = 'none'; renderList(); renderDetail(); renderExcludeChips(); updateQueueInfo(); };
+
+function saveSetting(section, key, val) {
+  config[section] = Object.assign({}, settings()[section], { [key]: val });
+  saveConfig();
+}
+$('ringTimeout').addEventListener('change', e => saveSetting('callSettings', 'ringTimeoutSec', Math.max(5, Math.min(45, Number(e.target.value) || 20))));
+function saveRingMyPhone(patch) {
+  const cur = settings().callSettings.ringMyPhone || { enabled: false, number: '' };
+  saveSetting('callSettings', 'ringMyPhone', Object.assign({}, cur, patch));
+}
+$('rmpEnabled').addEventListener('change', e => {
+  saveRingMyPhone({ enabled: e.target.checked });
+  $('rmpNumRow').style.display = e.target.checked ? '' : 'none';
+});
+$('rmpNumber').addEventListener('change', e => saveRingMyPhone({ number: e.target.value.trim() }));
+$('defDefaultWho').addEventListener('change', e => saveSetting('autoDial', 'defaultWho', e.target.value));
+$('defSkipToday').addEventListener('change', e => saveSetting('autoDial', 'skipCalledToday', e.target.checked));
+function saveCadence() {
+  const gaps = $('cadGaps').value.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n) && n >= 0);
+  const cad = {
+    enabled: $('cadEnabled').checked,
+    gaps: gaps.length ? gaps : [1, 3, 7, 14],
+    maxAttempts: Math.max(0, Math.min(50, Number($('cadMax').value) || 0))
+  };
+  $('cadGaps').value = cad.gaps.join(', '); // reflect what was actually saved
+  saveSetting('autoDial', 'cadence', cad);
+  $('cadRow').style.display = cad.enabled ? '' : 'none';
+  updateQueueInfo(); renderSettingsQueueInfo();
+}
+$('cadEnabled').addEventListener('change', saveCadence);
+$('cadGaps').addEventListener('change', saveCadence);
+$('cadMax').addEventListener('change', saveCadence);
+$('advanceDelay').addEventListener('change', e => saveSetting('autoDial', 'advanceDelaySec', Math.max(0, Math.min(15, Number(e.target.value) || 0))));
+$('parallelEnabled').addEventListener('change', async e => {
+  saveSetting('autoDial', 'parallelEnabled', e.target.checked);
+  if (e.target.checked && $('handsFree').checked) { $('handsFree').checked = false; saveSetting('autoDial', 'handsFree', false); $('attemptsRow').style.display = 'none'; }
+  if (e.target.checked) {
+    const note = $('settingsQueueInfo');
+    const prevHtml = note ? note.innerHTML : '';
+    if (note) note.innerHTML = 'Setting up parallel dialing on your Twilio account (one-time, ~10–20s)…';
+    try {
+      await api('/api/twilio/parallel-setup', { method: 'POST' });
+      if (note) note.innerHTML = '✓ Parallel dialing is ready.';
+      setTimeout(() => { if (note) note.innerHTML = prevHtml; }, 2500);
+    } catch (err) {
+      if (note) note.innerHTML = '<span style="color:var(--red)">Parallel setup failed: ' + esc(err.message) + '</span>';
+      e.target.checked = false;
+      saveSetting('autoDial', 'parallelEnabled', false);
+    }
+  }
+});
+$('handsFree').addEventListener('change', e => {
+  saveSetting('autoDial', 'handsFree', e.target.checked);
+  $('attemptsRow').style.display = e.target.checked ? '' : 'none';
+  if (e.target.checked && $('parallelEnabled').checked) { $('parallelEnabled').checked = false; saveSetting('autoDial', 'parallelEnabled', false); } // one auto mode at a time
+});
+$('attemptsPerLead').addEventListener('change', e => saveSetting('autoDial', 'attemptsPerLead', Math.max(1, Math.min(5, Number(e.target.value) || 1))));
+$('hoursEnabled').addEventListener('change', e => { saveSetting('callingHours', 'enabled', e.target.checked); updateQueueInfo(); });
+$('hoursStart').addEventListener('change', e => { saveSetting('callingHours', 'startHour', Number(e.target.value)); updateQueueInfo(); });
+$('hoursEnd').addEventListener('change', e => { saveSetting('callingHours', 'endHour', Number(e.target.value)); updateQueueInfo(); });
+function renderDispoList() {
+  $('dispoList').innerHTML = dispos().map((d, i) => `
+    <div class="dRow">
+      <span class="dn">${esc(d.name)}</span>
+      <label><input type="checkbox" ${d.contact ? 'checked' : ''} onchange="updDispo(${i},'contact',this.checked)"> Reached</label>
+      <label><input type="checkbox" ${d.exclude ? 'checked' : ''} onchange="updDispo(${i},'exclude',this.checked)"> Skip in auto-dial</label>
+      <button class="ghost" onclick="delDispo(${i})">✕</button>
+    </div>`).join('');
+}
+window.updDispo = async (i, k, v) => {
+  const list = dispos().slice();
+  list[i] = Object.assign({}, list[i], { [k]: v });
+  config.dispositions = list;
+  await saveConfig();
+  if (k === 'exclude') { v ? excludeSet.add(list[i].name) : excludeSet.delete(list[i].name); }
+  renderExcludeChips(); updateQueueInfo(); renderSettingsQueueInfo(); // queue count must reflect the change immediately, not just after closing Settings
+};
+function renderSettingsQueueInfo() {
+  const { queue: q } = buildQueue({ withMeta: true });
+  const who = document.querySelector('input[name=who]:checked');
+  const whoLabel = who ? who.parentElement.textContent.trim() : '';
+  $('settingsQueueInfo').innerHTML = `With the current Auto-Dial filter (<b>${esc(whoLabel)}</b>), this queue is <b>${q.length}</b> lead${q.length === 1 ? '' : 's'} right now.`;
+}
+window.delDispo = async i => {
+  const list = dispos().slice();
+  if (!confirm(`Remove "${list[i].name}" from the buttons? (Existing call history keeps it.)`)) return;
+  excludeSet.delete(list[i].name);
+  list.splice(i, 1);
+  config.dispositions = list;
+  await saveConfig();
+  renderDispoList();
+  renderExcludeChips(); updateQueueInfo(); renderSettingsQueueInfo(); renderList();
+};
+$('addDispo').onclick = async () => {
+  const name = $('newDispoName').value.trim();
+  if (!name) return;
+  if (dispos().some(d => d.name.toLowerCase() === name.toLowerCase())) return alert('Already exists.');
+  const contact = $('newDispoContact').checked;
+  config.dispositions = dispos().concat({ name, contact, color: contact ? 'green' : 'gray', exclude: false });
+  await saveConfig();
+  $('newDispoName').value = ''; $('newDispoContact').checked = false;
+  renderDispoList();
+  renderExcludeChips(); updateQueueInfo(); renderSettingsQueueInfo(); renderList();
+};
+async function saveConfig() {
+  await api('/api/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(config) });
+}
+
+// ---------- auto-dial ----------
+function renderExcludeChips() {
+  $('excludeChips').innerHTML = dispos().map(d =>
+    `<span class="xchip ${excludeSet.has(d.name) ? 'on' : ''}" onclick="toggleExclude('${esc(d.name)}')">${esc(d.name)}</span>`).join('');
+}
+window.toggleExclude = name => {
+  excludeSet.has(name) ? excludeSet.delete(name) : excludeSet.add(name);
+  renderExcludeChips(); updateQueueInfo();
+};
+function withinCallingHours(l) {
+  const h = settings().callingHours;
+  if (!h.enabled) return true;
+  const lh = localHour(l.state);
+  if (lh == null) return true; // unknown time zone — don't block on it
+  return lh >= h.startHour && lh < h.endHour;
+}
+function buildQueue(opts) {
+  const who = document.querySelector('input[name=who]:checked').value;
+  const skipToday = $('skipToday').checked;
+  let hoursExcluded = 0, resting = 0, exhausted = 0, callbacksSkipped = 0;
+  const now = new Date();
+  const cad = settings().autoDial.cadence || {};
+  // cadence: after the nth dial a lead rests gaps[n-1] days (last gap repeats) before
+  // it resurfaces in the queue. maxAttempts archives never-reached leads for good.
+  const cadenceHolds = l => {
+    if (!cad.enabled || !(cad.gaps || []).length) return false;
+    const n = callCount(l);
+    if (!n || !l.lastCalledAt) return false;
+    if (cad.maxAttempts > 0 && n >= cad.maxAttempts) { exhausted++; return true; }
+    const gap = cad.gaps[Math.min(n - 1, cad.gaps.length - 1)];
+    if ((now - new Date(l.lastCalledAt)) < gap * 86400000) { resting++; return true; }
+    return false;
+  };
+  const q = leads.filter(l => {
+    if (l.blocked) return false;
+    // A scheduled callback is a reminder for a human to call, not an auto-dial trigger — it used
+    // to jump the queue and dial itself once due, which fired on leads set as "call me later"
+    // notes-to-self, not real promises. Call these yourself from the "Callbacks due today" strip.
+    if (l.callbackAt) { callbacksSkipped++; return false; }
+    const st = statusOf(l);
+    if (who === 'notReached' && st === 'contacted') return false;
+    if (who === 'untouched' && st !== 'untouched') return false;
+    if (skipToday && calledToday(l)) return false;
+    if (l.lastDispo && excludeSet.has(l.lastDispo)) return false;
+    if ((l.log || []).some(e => excludeSet.has(logName(e)))) return false;
+    if (cadenceHolds(l)) return false;
+    if (!withinCallingHours(l)) { hoursExcluded++; return false; }
+    return true;
+  });
+  // best-time ordering: leads whose CURRENT local hour has historically answered best dial first
+  // (needs enough logged outcomes to matter; with no data every score is equal, order unchanged).
+  const hm = hourlyAnswerMap();
+  const hourScore = l => {
+    const lh = localHour(l.state);
+    if (lh == null) return -1;
+    const d = hm[Math.floor(lh)];
+    return d && d.dials >= 5 ? d.connects / d.dials : -1;
+  };
+  const scores = new Map(q.map(l => [l.id, hourScore(l)]));
+  q.sort((a, b) => scores.get(b.id) - scores.get(a.id)); // stable sort → equal scores keep their order
+  if (opts && opts.withMeta) return { queue: q, hoursExcluded, resting, exhausted, callbacksSkipped };
+  return q;
+}
+function updateQueueInfo() {
+  const { queue: q, hoursExcluded, resting, exhausted, callbacksSkipped } = buildQueue({ withMeta: true });
+  const extras = [];
+  if (callbacksSkipped) extras.push(`${callbacksSkipped} have a scheduled callback — dial from the strip above`);
+  if (resting) extras.push(`${resting} resting between tries`);
+  if (exhausted) extras.push(`${exhausted} archived at max tries`);
+  if (hoursExcluded) extras.push(`${hoursExcluded} outside calling hours`);
+  $('queueInfo').innerHTML = `Queue: <b>${q.length}</b> lead${q.length === 1 ? '' : 's'} to call`
+    + (extras.length ? ` <span style="color:var(--dim)">(${extras.join(' · ')})</span>` : '');
+  $('autoStart').disabled = !q.length || !device;
+  if (!device) $('autoStart').textContent = 'Twilio required for auto-dial';
+  else $('autoStart').textContent = '▶ Start Auto-Dial';
+  if (!auto.active) $('autoMini').textContent = q.length + ' queued';
+}
+
+// collapse / expand the auto-dial card (remembers state)
+function setAutoCollapsed(c) {
+  $('autoCard').classList.toggle('collapsed', c);
+  localStorage.setItem('autoCollapsed', c ? '1' : '0');
+}
+$('autoToggle').onclick = () => setAutoCollapsed(!$('autoCard').classList.contains('collapsed'));
+if (localStorage.getItem('autoCollapsed') === '1') setAutoCollapsed(true);
+
+// light / dark theme toggle (theme itself is applied pre-paint in <head>; this just syncs the button + handles switching)
+function setTheme(light) {
+  if (light) { document.documentElement.dataset.theme = 'light'; localStorage.setItem('theme', 'light'); }
+  else { delete document.documentElement.dataset.theme; localStorage.setItem('theme', 'dark'); }
+  $('themeToggle').textContent = light ? '☀ Light' : '🌙 Dark';
+}
+$('themeToggle').onclick = () => setTheme(document.documentElement.dataset.theme !== 'light');
+setTheme(document.documentElement.dataset.theme === 'light');
+document.querySelectorAll('input[name=who]').forEach(r => r.addEventListener('change', updateQueueInfo));
+$('skipToday').addEventListener('change', updateQueueInfo);
+
+$('autoStart').onclick = () => {
+  auto.queue = buildQueue();
+  if (!auto.queue.length) return;
+  setAutoCollapsed(false);
+  auto.active = true; auto.idx = 0; auto.awaiting = false;
+  $('autoSetup').style.display = 'none'; $('autoRun').style.display = 'block';
+  $('autoCard').classList.add('running');
+  dialCurrent();
+};
+$('autoStop').onclick = stopAuto;
+$('autoSkip').onclick = () => { clearTimeout(auto.timer); auto.awaiting = false; auto.idx++; dialCurrent(); };
+$('autoNow').onclick = () => { clearTimeout(auto.timer); dialCurrent(); };
+function stopAuto() {
+  auto.active = false; auto.awaiting = false; auto.awaitingBridge = false; auto.onLiveCall = false;
+  clearTimeout(auto.timer);
+  stopAutoRing(); // kill the dialing heartbeat if we stopped mid-dial
+  if (auto.session) endAutoSession('session ended'); // ring-my-phone: end the parked session
+  // Do NOT hang up a live call here — Stop halts the queue but keeps you connected to whoever
+  // you're talking to. Hang up with the Hang up button when you're done. (This is what dropped
+  // a live call before.) If it's still just ringing (no one connected), it resolves on its own.
+  $('autoSetup').style.display = 'block'; $('autoRun').style.display = 'none';
+  $('autoCard').classList.remove('running');
+  updateQueueInfo();
+}
+function autoStatusMsg(msg) { $('autoStatus').innerHTML = msg; if (auto.active) $('autoMini').textContent = `${auto.idx + 1}/${auto.queue.length}`; }
+async function dialCurrent() {
+  if (!auto.active) return;
+  if (auto.idx >= auto.queue.length) {
+    autoStatusMsg('🎉 Queue finished!');
+    setTimeout(stopAuto, 1800);
+    return;
+  }
+  auto.awaiting = false;
+  const rmp = settings().callSettings.ringMyPhone;
+  if (rmp && rmp.enabled && rmp.number) {
+    const session = await ensureAutoSession();
+    if (!session) return; // stopAuto() already fired, or still connecting — nothing more to do here
+    return dialSessionBatch(session, settings().autoDial.parallelEnabled ? 3 : 1);
+  }
+  if (settings().autoDial.parallelEnabled && device) return runParallelBatch();
+  if (settings().autoDial.handsFree && device) return dialSingleAuto();
+  const lead = auto.queue[auto.idx];
+  select(lead.id);
+  autoStatusMsg(`Calling <span class="who">${esc(lead.name)}</span> — ${auto.idx + 1} of ${auto.queue.length}`);
+  startCall();
+}
+// Hands-free single-line dialing: the server dials one lead with answering-machine detection
+// and returns a verdict. Voicemail/no-answer are auto-dispositioned and it moves on by itself;
+// a live human auto-bridges to the browser (autoAcceptBridge) and beeps so you come talk.
+const AUTO_OUTCOME_DISPO = { voicemail: 'Straight to Voicemail', 'no-answer': 'No Answer', busy: 'No Answer', failed: 'Bad Number', canceled: 'No Answer' };
+async function dialSingleAuto() {
+  if (activeCall || auto.onLiveCall) return; // never dial over a live call you're on
+  const lead = auto.queue[auto.idx];
+  if (!lead) return;
+  select(lead.id);
+  const maxTries = Math.max(1, Math.min(5, settings().autoDial.attemptsPerLead || 1));
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    if (!auto.active) return;
+    autoStatusMsg(`<span class="pulse">📞</span> Dialing <span class="who">${esc(lead.name)}</span>${maxTries > 1 ? ` — try ${attempt}/${maxTries}` : ''} <span style="color:var(--dim)">(${auto.idx + 1} of ${auto.queue.length}) · listening for a live answer…</span>`);
+    setStatus('dialing ' + fmtPhone(lead.phone) + '…');
+    await bumpDial(lead);
+    renderList();
+    auto.awaitingBridge = true;
+    startAutoRing(); // audible ringback so you can hear it working (browser isn't on the call in hands-free)
+    let result;
+    try {
+      result = await api('/api/twilio/auto-single', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ to: e164(lead.phone), callerId: effectiveCallerId(lead), ringTimeoutSec: settings().callSettings.ringTimeoutSec, leadId: lead.id, leadState: normState(lead.state) || null })
+      });
+    } catch (e) { stopAutoRing(); auto.awaitingBridge = false; showBanner('Auto-dial error: ' + e.message); break; }
+    if (!auto.active) { stopAutoRing(); return; }
+    // A live bridge (activeCall / onLiveCall) is the source of truth: if you got connected to
+    // a person, STOP here regardless of the server verdict — never dispose or advance over a
+    // live call. This closes the race where the bridge connected but the poll returned non-human.
+    if (result.outcome === 'human' || activeCall || auto.onLiveCall) {
+      stopAutoRing();
+      autoStatusMsg(`✅ <span class="who">${esc(lead.name)}</span> ANSWERED — talk now, then pick a disposition`);
+      waitForDispo(); // agent dispositions → autoAdvance() moves to the next lead
+      return;
+    }
+    stopAutoRing();
+    auto.awaitingBridge = false;
+    const tag = AUTO_OUTCOME_DISPO[result.outcome] || 'No Answer';
+    await logOutcome(lead, tag);
+    auto.lastResult = `${esc(lead.name)} → ${tag}`;
+    renderList(); renderDetail();
+    autoStatusMsg(`<span class="who">${esc(lead.name)}</span> → <b>${tag}</b> ✓ auto-marked`);
+    if (result.outcome === 'failed' || result.outcome === 'canceled') break; // bad/unreachable — don't keep retrying
+    if (attempt < maxTries) { await sleep(1000); }
+  }
+  if (!auto.active) return;
+  auto._batchSize = 0; // advance by one lead
+  autoAdvance();
+}
+// a live person answered a hands-free dial — bridge them into the browser and alert the agent
+function autoAcceptBridge(call) {
+  auto.awaitingBridge = false;
+  auto.onLiveCall = true;    // hard halt — the dialer must not advance while you're on this call
+  clearTimeout(auto.timer);  // cancel any pending "next in 3s…" countdown so a late bridge isn't run over
+  stopAutoRing(); // stop the dialing heartbeat — a person is on the line now
+  try { call.accept(); } catch (e) {}
+  activeCall = call;
+  bridgeBeep();
+  const lead = auto.queue[auto.idx];
+  if (lead) select(lead.id);
+  if (auto.active) waitForDispo(); // freeze the queue until you disposition this person
+  setStatus('LIVE — ' + (lead ? lead.name : fmtPhone(call.parameters.From || '')));
+  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+  if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = ''; }
+  call.on('disconnect', () => {
+    activeCall = null;
+    const c = $('callBtn'), h = $('hangupBtn'), m = $('muteBtn');
+    if (c) { c.style.display = ''; h.style.display = 'none'; m.style.display = 'none'; m.textContent = '🎙 Mute'; m.style.background = ''; m.style.color = ''; }
+    setStatus('call ended — pick a disposition');
+  });
+  renderDetail();
+}
+// short attention beep so an away agent knows a live person is on the line
+function bridgeBeep() {
+  try {
+    toneCtx = toneCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (toneCtx.state === 'suspended') toneCtx.resume();
+    const g = toneCtx.createGain(); g.gain.value = 0.22; g.connect(toneCtx.destination);
+    const beep = (f, t) => { const o = toneCtx.createOscillator(); o.frequency.value = f; o.connect(g); o.start(toneCtx.currentTime + t); o.stop(toneCtx.currentTime + t + 0.16); };
+    beep(880, 0); beep(1175, 0.2); beep(880, 0.4);
+    setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 800);
+  } catch (e) {}
+}
+// a single soft ping — used as a quiet heartbeat while a hands-free dial is in progress
+function ping() {
+  try {
+    toneCtx = toneCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (toneCtx.state === 'suspended') toneCtx.resume();
+    const g = toneCtx.createGain(); g.gain.value = 0.0001; g.connect(toneCtx.destination);
+    const o = toneCtx.createOscillator(); o.type = 'sine'; o.frequency.value = 660; o.connect(g);
+    const t = toneCtx.currentTime; o.start(t);
+    g.gain.setTargetAtTime(0.05, t, 0.008);         // quick soft attack
+    g.gain.setTargetAtTime(0.0001, t + 0.07, 0.05); // gentle decay
+    o.stop(t + 0.35);
+    setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 500);
+  } catch (e) {}
+}
+// gentle heartbeat while dialing: one ping when a dial starts, then every few seconds.
+// Not a ringtone — just a cue that it's alive. Stops the moment a call resolves.
+let autoPingTimer = null;
+function startAutoRing() {
+  stopAutoRing();
+  ping();
+  autoPingTimer = setInterval(ping, 4000);
+}
+function stopAutoRing() {
+  if (autoPingTimer) { clearInterval(autoPingTimer); autoPingTimer = null; }
+}
+const PARALLEL_OUTCOME_DISPO = { voicemail: 'Straight to Voicemail', 'no-answer': 'No Answer', busy: 'No Answer', failed: 'Bad Number', fax: 'Bad Number' };
+async function logOutcome(lead, tag) {
+  lead.lastDispo = tag;
+  lead.lastCalledAt = new Date().toISOString();
+  lead.log = lead.log || [];
+  // collapse consecutive identical outcomes into one "Tag ×N" entry instead of stacking
+  // duplicate lines (e.g. 3 retry no-answers → "No Answer ×3"). dialCount still counts each ring.
+  const last = lead.log[lead.log.length - 1];
+  const lastBase = last ? last.replace(/^\d+\/\d+\s*/, '').replace(/\s*×\d+$/, '') : null;
+  if (lastBase === tag) {
+    const m = last.match(/×(\d+)$/);
+    lead.log[lead.log.length - 1] = `${stamp()} ${tag} ×${m ? parseInt(m[1], 10) + 1 : 2}`;
+  } else {
+    lead.log.push(`${stamp()} ${tag}`);
+  }
+  await patch(lead, { lastDispo: lead.lastDispo, lastCalledAt: lead.lastCalledAt, log: lead.log });
+}
+async function processParallelLegs(result, batch) {
+  const tasks = [];
+  for (const leg of result.legs) {
+    if (leg.leadId === result.winner || leg.outcome === 'canceled') continue;
+    const lead = batch.find(l => l.id === leg.leadId);
+    if (lead) tasks.push(logOutcome(lead, PARALLEL_OUTCOME_DISPO[leg.outcome] || 'No Answer'));
+  }
+  await Promise.all(tasks);
+  renderList();
+}
+
+// Browser-WebRTC parallel dialing (ring-my-phone OFF). When ring-my-phone is ON,
+// dialCurrent() uses the persistent-session path (ensureAutoSession + dialSessionBatch)
+// instead — one phone ring per whole auto-dial session, not one per batch.
+async function runParallelBatch() {
+  const batch = auto.queue.slice(auto.idx, auto.idx + 3);
+  if (!batch.length) return dialCurrent();
+  auto._batchSize = batch.length;
+  batch.forEach(l => bumpDial(l)); // count each leg dialed
+  autoStatusMsg(`Dialing <span class="who">${batch.map(l => esc(l.name)).join(', ')}</span> — ${auto.idx + 1}–${auto.idx + batch.length} of ${auto.queue.length}`);
+  const room = 'pd-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
+  let ended = false;
+  startDialTone();
+  try {
+    activeCall = await device.connect({ params: { Mode: 'parallel', Room: room, Timeout: String(settings().callSettings.ringTimeoutSec) } });
+  } catch (e) {
+    stopDialTone();
+    showBanner('Parallel dial failed to start: ' + e.message);
+    auto.idx += batch.length; auto._batchSize = 0;
+    return auto.active ? autoAdvanceDelay() : undefined;
+  }
+  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+  if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = ''; }
+  setStatus('dialing ' + batch.length + ' leads at once…');
+  // NOTE: do NOT stop the ringback on 'accept' here — in parallel mode 'accept' fires the
+  // instant the agent joins the (still-empty) conference. Keep ringing until a lead actually
+  // connects (winner resolved below), so there's no dead-air/hold-music gap while leads ring.
+  activeCall.on('cancel', stopDialTone);
+  activeCall.on('error', stopDialTone);
+  activeCall.on('disconnect', () => {
+    stopDialTone();
+    ended = true;
+    activeCall = null;
+    resetCallUI();
+    setStatus('call ended');
+  });
+
+  let result;
+  try {
+    result = await api('/api/twilio/parallel-dial', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        room,
+        ringTimeoutSec: settings().callSettings.ringTimeoutSec,
+        calls: batch.map(l => ({ leadId: l.id, to: e164(l.phone), callerId: effectiveCallerId(l), leadState: normState(l.state) || null }))
+      })
+    });
+  } catch (e) {
+    showBanner('Parallel dial failed: ' + e.message);
+    if (activeCall) hangUp();
+    auto.idx += batch.length; auto._batchSize = 0;
+    return auto.active ? autoAdvanceDelay() : undefined;
+  }
+
+  await processParallelLegs(result, batch);
+
+  if (result.winner) {
+    stopDialTone(); // a human connected — stop the ringback
+    const lead = batch.find(l => l.id === result.winner);
+    select(lead.id);
+    setStatus('connected — parallel batch');
+    autoStatusMsg(`Connected: <span class="who">${esc(lead.name)}</span> — pick a disposition to continue`);
+    if (!ended) waitForDispo();
+  } else {
+    stopDialTone(); // nobody answered — stop the ringback before advancing
+    if (activeCall) hangUp();
+    auto.idx += batch.length; auto._batchSize = 0;
+    autoAdvanceDelay();
+  }
+}
+// ---------- persistent session dialing (ring-my-phone during auto-dial) ----------
+// Rings the agent's phone ONCE for the whole auto-dial session — they answer, stay
+// parked in a Twilio conference, and each subsequent lead (or batch of 3) is dialed
+// into that SAME room without ringing the agent again. Ends when auto-dial stops,
+// the queue finishes, or the agent's own leg disconnects (they hang up their phone).
+function makeSessionShim(agentSid, room) {
+  let muted = false;
+  const shim = {
+    sid: agentSid, room, phoneMode: true, isSession: true,
+    currentLegSid: null, // the currently-connected lead's call sid, if any
+    isMuted: () => muted,
+    mute: m => {
+      muted = m;
+      api('/api/twilio/mute-agent', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ room, callSid: agentSid, muted: m }) }).catch(() => {});
+    },
+    disconnect: () => {
+      if (shim.currentLegSid) {
+        // hang up just this lead — the session stays parked for the next one
+        api('/api/twilio/hangup-call', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ sid: shim.currentLegSid }) }).catch(() => {});
+        shim.currentLegSid = null;
+      } else {
+        endAutoSession('call ended'); // nobody connected — end the whole session
+      }
+    }
+  };
+  return shim;
+}
+function endAutoSession(reason) {
+  const s = auto.session;
+  auto.session = null;
+  stopPhonePoll();
+  if (s && s.sid) api('/api/twilio/hangup-call', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ sid: s.sid }) }).catch(() => {});
+  activeCall = null;
+  resetCallUI();
+  setStatus(reason || 'call ended');
+}
+async function ensureAutoSession() {
+  if (auto.session) return auto.session.ready ? auto.session : null; // already ringing/connecting
+  const room = 'session-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
+  auto.session = { room, sid: null, ready: false, shim: null };
+  setStatus('ringing your phone…');
+  autoStatusMsg('Ringing your phone — answer to start the session…');
+  let sid;
+  try {
+    const r = await api('/api/twilio/call-agent', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ mode: 'parallel', room, timeoutSec: settings().callSettings.ringTimeoutSec }) });
+    sid = r.sid;
+  } catch (e) {
+    showBanner('Could not ring your phone: ' + e.message);
+    auto.session = null;
+    stopAuto();
+    return null;
+  }
+  auto.session.sid = sid;
+  const shim = makeSessionShim(sid, room);
+  auto.session.shim = shim;
+  activeCall = shim;
+  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+  if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = ''; }
+  pollPhoneCall(sid,
+    () => { if (auto.session) auto.session.ready = true; setStatus('connected — session active, dialing…'); },
+    () => { const wasActive = auto.active; endAutoSession('call ended'); if (wasActive) stopAuto(); }
+  );
+  while (auto.active && auto.session && !auto.session.ready) await sleep(500);
+  return (auto.active && auto.session && auto.session.ready) ? auto.session : null;
+}
+async function dialSessionBatch(session, batchSize) {
+  const batch = auto.queue.slice(auto.idx, auto.idx + batchSize);
+  if (!batch.length) return dialCurrent();
+  auto._batchSize = batch.length;
+  autoStatusMsg(`Dialing <span class="who">${batch.map(l => esc(l.name)).join(', ')}</span> — ${auto.idx + 1}–${auto.idx + batch.length} of ${auto.queue.length}`);
+  setStatus('dialing ' + batch.length + ' lead' + (batch.length > 1 ? 's' : '') + '…');
+  let result;
+  try {
+    result = await api('/api/twilio/parallel-dial', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        room: session.room,
+        ringTimeoutSec: settings().callSettings.ringTimeoutSec,
+        calls: batch.map(l => ({ leadId: l.id, to: e164(l.phone), callerId: effectiveCallerId(l), leadState: normState(l.state) || null }))
+      })
+    });
+  } catch (e) {
+    showBanner('Dial failed: ' + e.message);
+    auto.idx += batch.length; auto._batchSize = 0;
+    return auto.active ? autoAdvanceDelay() : undefined;
+  }
+  if (!auto.session) return; // session ended while this batch was dialing
+  await processParallelLegs(result, batch);
+  if (result.winner) {
+    const lead = batch.find(l => l.id === result.winner);
+    if (session.shim) session.shim.currentLegSid = result.winnerSid;
+    select(lead.id);
+    setStatus('connected — on your phone');
+    autoStatusMsg(`Connected: <span class="who">${esc(lead.name)}</span> — pick a disposition to continue`);
+    waitForDispo();
+  } else {
+    auto.idx += batch.length; auto._batchSize = 0;
+    autoAdvanceDelay();
+  }
+}
+
+function autoAdvance() {
+  auto.awaiting = false;
+  auto.onLiveCall = false; // you dispositioned — the live call is done, resume the queue
+  auto.idx += auto._batchSize || 1; // parallel batches jump by however many leads were dialed at once
+  auto._batchSize = 0;
+  autoAdvanceDelay();
+}
+function autoAdvanceDelay() {
+  if (auto.idx >= auto.queue.length) return dialCurrent();
+  let n = settings().autoDial.advanceDelaySec;
+  if (n <= 0) return dialCurrent();
+  const tick = () => {
+    if (!auto.active) return;
+    if (n <= 0) return dialCurrent();
+    const last = auto.lastResult ? `<span style="color:var(--dim)">✓ ${auto.lastResult}</span> &nbsp;·&nbsp; ` : '';
+    autoStatusMsg(`${last}Next: <span class="who">${esc(auto.queue[auto.idx].name)}</span> in ${n}… (${auto.idx + 1} of ${auto.queue.length})`);
+    n--;
+    auto.timer = setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+// ---------- Twilio ----------
+async function initTwilio() {
+  try {
+    const t = await api('/api/token');
+    if (t.error) { showBanner(t.error + ' — click-to-call disabled, tel: links still work.'); updateQueueInfo(); return; }
+    callerId = t.callerId;
+    device = new Twilio.Device(t.token, { logLevel: 'error' });
+    device.on('error', e => { stopDialTone(); setStatus('error: ' + e.message); if (auto.active && !auto.awaiting) waitForDispo(); });
+    device.on('incoming', handleIncoming);
+    await device.register();
+    setInterval(async () => { const n = await api('/api/token'); if (n.token) device.updateToken(n.token); }, 45 * 60 * 1000);
+    setStatus('ready');
+    updateQueueInfo();
+  } catch (e) { showBanner('Twilio init failed: ' + e.message); }
+}
+function setStatus(s) { const el = $('callStatus'); if (el) el.textContent = s; }
+
+// local dial/ringback tone — plays the instant Call is clicked so there's no
+// dead-silent gap while Twilio sets the call up (matches the Ringy feel)
+let toneCtx = null, toneNodes = null, toneTimer = null;
+function startDialTone() {
+  stopDialTone();
+  try {
+    toneCtx = toneCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (toneCtx.state === 'suspended') toneCtx.resume();
+    const gain = toneCtx.createGain();
+    gain.gain.value = 0.12;
+    gain.connect(toneCtx.destination);
+    const mk = f => { const o = toneCtx.createOscillator(); o.frequency.value = f; o.connect(gain); o.start(); return o; };
+    toneNodes = { gain, oscs: [mk(350), mk(440)] }; // US dial tone
+    // brief dial-tone blip only, then stop — Twilio provides the real ringback once the
+    // call is set up, and a sustained synthetic ringback used to play OVER it (double ring).
+    toneTimer = setTimeout(() => { stopDialTone(); }, 800);
+  } catch (e) { /* no audio available — call still works, just silent setup */ }
+}
+function stopDialTone() {
+  if (toneTimer) { clearTimeout(toneTimer); toneTimer = null; }
+  if (!toneNodes) return;
+  const { gain, oscs } = toneNodes;
+  toneNodes = null;
+  try {
+    gain.gain.setTargetAtTime(0.0001, toneCtx.currentTime, 0.04); // quick fade, no click artifact
+    setTimeout(() => { oscs.forEach(o => { try { o.stop(); } catch (e) {} }); try { gain.disconnect(); } catch (e) {} }, 250);
+  } catch (e) {}
+}
+
+// ---------- "ring my phone" call delivery ----------
+function resetCallUI() {
+  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+  if (cb) { cb.style.display = ''; hb.style.display = 'none'; mb.style.display = 'none'; mb.textContent = '🎙 Mute'; mb.style.background = ''; mb.style.color = ''; }
+}
+let phonePollTimer = null;
+function stopPhonePoll() { if (phonePollTimer) { clearInterval(phonePollTimer); phonePollTimer = null; } }
+function pollPhoneCall(sid, onConnected, onEnded) {
+  stopPhonePoll();
+  let connectedFired = false;
+  phonePollTimer = setInterval(async () => {
+    if (!activeCall || activeCall.sid !== sid) return stopPhonePoll();
+    let st;
+    try { st = await api('/api/twilio/call-status?sid=' + encodeURIComponent(sid)); } catch (e) { return; }
+    if (st.status === 'in-progress' && !connectedFired) { connectedFired = true; onConnected(); }
+    if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(st.status)) {
+      stopPhonePoll();
+      onEnded();
+      if (auto.active && !auto.awaiting) waitForDispo();
+    }
+  }, 1000);
+}
+// duck-types the same shape as a Twilio Voice SDK Call object (isMuted/mute/disconnect)
+// so the existing hangUp()/toggleMute() call sites work unchanged against either kind of call.
+function makePhoneCallShim(sid, room) {
+  let muted = false;
+  return {
+    sid, room, phoneMode: true,
+    isMuted: () => muted,
+    mute: m => {
+      muted = m;
+      if (room) api('/api/twilio/mute-agent', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ room, callSid: sid, muted: m }) }).catch(() => {});
+    },
+    disconnect: () => {
+      stopPhonePoll();
+      api('/api/twilio/hangup-call', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ sid }) }).catch(() => {});
+      activeCall = null;
+      resetCallUI();
+      setStatus('call ended');
+    }
+  };
+}
+async function startCallViaPhone() {
+  if (!sel || activeCall) return;
+  const fromNum = effectiveCallerId(sel);
+  setStatus('ringing your phone…');
+  let sid;
+  try {
+    const r = await api('/api/twilio/call-agent', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode: 'direct', to: e164(sel.phone), callerId: fromNum, timeoutSec: settings().callSettings.ringTimeoutSec })
+    });
+    sid = r.sid;
+  } catch (e) { setStatus('call failed: ' + e.message); return; }
+  activeCall = makePhoneCallShim(sid, null);
+  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+  if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = 'none'; } // no in-app mute for a direct (non-conference) call — use your phone's own mute
+  pollPhoneCall(sid,
+    () => setStatus('connected — talking on your phone'),
+    () => { activeCall = null; resetCallUI(); setStatus('call ended'); }
+  );
+}
+
+function toggleMute() {
+  if (!activeCall) return;
+  const m = !activeCall.isMuted();
+  activeCall.mute(m);
+  const b = $('muteBtn');
+  if (b) { b.textContent = m ? '🔇 Muted' : '🎙 Mute'; b.style.background = m ? 'var(--amber, #c9a15a)' : ''; b.style.color = m ? '#1c1c1a' : ''; }
+  setStatus(m ? 'connected — mic muted' : 'connected');
+}
+window.toggleMute = toggleMute;
+
+// ---------- manual dialer (type any number, direct 1:1 call — no conference) ----------
+let dpOwnsCall = false;
+function openDialer() {
+  $('dialerModal').style.display = 'flex';
+  $('dpFrom').textContent = device ? (callerId ? 'from ' + fmtPhone(callerId) : '') : 'Twilio not ready — tel: link will be used';
+  if (!activeCall) { dpUIActive(false); $('dpStatus').textContent = ''; }
+  setTimeout(() => $('dpNum').focus(), 40);
+}
+function closeDialer() {
+  if (activeCall && dpOwnsCall) hangUpManual(); // don't strand a live manual call
+  $('dialerModal').style.display = 'none';
+}
+function dpUIActive(on) {
+  $('dpCall').style.display = on ? 'none' : '';
+  $('dpHang').style.display = on ? '' : 'none';
+  $('dpMute').style.display = on ? '' : 'none';
+  if (!on) { const b = $('dpMute'); b.textContent = '🎙 Mute'; b.style.background = ''; b.style.color = ''; }
+}
+async function manualDial() {
+  const raw = $('dpNum').value.trim();
+  if (digits(raw).length < 7) { $('dpStatus').textContent = 'Enter a full number'; return; }
+  if (!device) { window.location.href = 'tel:' + e164(raw); return; }
+  if (activeCall) return; // another call already up
+  const to = e164(raw);
+  const ld = leads.find(l => e164(l.phone) === to);
+  if (ld) bumpDial(ld); // if the dialed number is a known lead, count it
+  logCallEvent(ld || null, callerId, 'manual', 'manual'); // per-number dial volume
+  dpOwnsCall = true;
+  startDialTone();
+  try {
+    activeCall = await device.connect({ params: { To: to, CallerId: callerId, Timeout: String(settings().callSettings.ringTimeoutSec) } });
+  } catch (err) { stopDialTone(); dpOwnsCall = false; $('dpStatus').textContent = 'Call failed: ' + err.message; return; }
+  dpUIActive(true);
+  $('dpStatus').textContent = 'calling ' + fmtPhone(to) + '…';
+  activeCall.on('accept', () => { stopDialTone(); $('dpStatus').textContent = 'connected'; });
+  activeCall.on('cancel', stopDialTone);
+  activeCall.on('error', err => { stopDialTone(); $('dpStatus').textContent = 'error: ' + (err.message || err); });
+  activeCall.on('disconnect', () => {
+    stopDialTone(); activeCall = null; dpOwnsCall = false; dpUIActive(false); $('dpStatus').textContent = 'call ended';
+  });
+}
+function dpMuteToggle() {
+  if (!activeCall) return;
+  const m = !activeCall.isMuted();
+  activeCall.mute(m);
+  const b = $('dpMute');
+  b.textContent = m ? '🔇 Muted' : '🎙 Mute'; b.style.background = m ? 'var(--amber,#c9a15a)' : ''; b.style.color = m ? '#1c1c1a' : '';
+  $('dpStatus').textContent = m ? 'connected — mic muted' : 'connected';
+}
+function hangUpManual() { if (activeCall) activeCall.disconnect(); }
+$('dialerBtn').onclick = openDialer;
+$('dpCloseBtn').onclick = closeDialer;
+$('dpCall').onclick = manualDial;
+$('dpHang').onclick = hangUpManual;
+$('dpMute').onclick = dpMuteToggle;
+$('dpBack').onclick = () => { $('dpNum').value = $('dpNum').value.slice(0, -1); };
+$('dpad').addEventListener('click', e => { const b = e.target.closest('button'); if (b) $('dpNum').value += b.dataset.k; });
+$('dpNum').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); manualDial(); } });
+$('dialerModal').addEventListener('click', e => { if (e.target.id === 'dialerModal') closeDialer(); });
+
+// ---------- add a single lead by hand ----------
+function openAddLead(prefill) {
+  ['alName','alPhone','alState','alEmail','alNotes'].forEach(id => $(id).value = '');
+  if (prefill && prefill.phone) $('alPhone').value = fmtPhone(prefill.phone);
+  $('alStatus').textContent = '';
+  $('addLeadModal').style.display = 'flex';
+  setTimeout(() => $(prefill && prefill.phone ? 'alName' : 'alName').focus(), 40);
+}
+function closeAddLead() { $('addLeadModal').style.display = 'none'; }
+async function saveNewLead() {
+  const name = $('alName').value.trim();
+  const phone = digits($('alPhone').value);
+  if (!name) { $('alStatus').textContent = 'Name is required'; return; }
+  if (phone.length < 10) { $('alStatus').textContent = 'Enter a full 10-digit phone number'; return; }
+  const dupe = leads.find(l => digits(l.phone).endsWith(phone.slice(-10)));
+  if (dupe && !confirm(`${dupe.name} already has this number — update that lead instead of creating a duplicate?`)) return;
+  $('alStatus').textContent = 'Saving…';
+  const row = { name, phone, state: $('alState').value.trim().toUpperCase(), email: $('alEmail').value.trim(), notes: $('alNotes').value.trim(), vendor: 'Added by hand' };
+  try {
+    await api('/api/leads', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify([row]) });
+    await load();
+    const nl = leads.find(l => digits(l.phone).endsWith(phone.slice(-10)));
+    if (nl) select(nl.id);
+    closeAddLead();
+  } catch (e) { $('alStatus').textContent = 'Save failed: ' + e.message; }
+}
+window.openAddLead = openAddLead;
+$('addLeadBtn').onclick = () => openAddLead();
+$('alCloseBtn').onclick = closeAddLead;
+$('alSave').onclick = saveNewLead;
+$('addLeadModal').addEventListener('click', e => { if (e.target.id === 'addLeadModal') closeAddLead(); });
+
+// ---------- inbound calls (browser softphone) ----------
+let pendingIncoming = null;
+function handleIncoming(call) {
+  if (auto.active && auto.awaitingBridge) return autoAcceptBridge(call); // hands-free live bridge — auto-answer, no banner
+  if (activeCall) { call.reject(); return; } // already on a call — don't double-ring
+  pendingIncoming = call;
+  const from = call.parameters.From || '';
+  const lead = leads.find(l => e164(l.phone) === e164(from));
+  $('icTag').textContent = 'Incoming call';
+  $('icWho').textContent = lead ? lead.name : (from ? fmtPhone(from) : 'Unknown caller');
+  $('icSub').textContent = lead ? fmtPhone(from) + ' · known lead' : (from ? 'Not in your leads' : '');
+  $('icRingBtns').style.display = 'flex';
+  $('icCallBtns').style.display = 'none';
+  $('incomingCall').style.display = 'block';
+  startDialTone(); // audible ring
+  call.on('cancel', clearIncoming);  // caller hung up before you picked up
+  call.on('reject', clearIncoming);
+}
+function clearIncoming() {
+  stopDialTone();
+  $('incomingCall').style.display = 'none';
+  pendingIncoming = null;
+}
+function acceptIncoming() {
+  const call = pendingIncoming;
+  if (!call) return;
+  stopDialTone();
+  call.accept();
+  activeCall = call;
+  pendingIncoming = null;
+  const from = call.parameters.From || '';
+  const lead = leads.find(l => e164(l.phone) === e164(from));
+  if (lead) select(lead.id); // screen pop — open their profile + history
+  $('icWho').textContent = lead ? lead.name : (from ? fmtPhone(from) : 'Unknown caller');
+  if (!lead && from) $('icSub').innerHTML = `<a style="cursor:pointer;color:var(--accent)" onclick="openAddLead({phone:'${esc(from)}'})">+ Save as a lead</a>`;
+  $('icTag').textContent = 'On call';
+  $('icRingBtns').style.display = 'none';
+  $('icCallBtns').style.display = 'flex';
+  $('incomingCall').style.display = 'block';
+  setStatus('on call' + (lead ? ' with ' + lead.name : ' — ' + fmtPhone(from)));
+  call.on('disconnect', () => {
+    activeCall = null;
+    $('incomingCall').style.display = 'none';
+    const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+    if (cb) { cb.style.display = ''; hb.style.display = 'none'; mb.style.display = 'none'; mb.textContent = '🎙 Mute'; mb.style.background = ''; mb.style.color = ''; }
+    setStatus('call ended');
+  });
+  renderDetail(); // reflect the live call in the detail call bar too
+}
+function declineIncoming() { if (pendingIncoming) pendingIncoming.reject(); clearIncoming(); }
+function icMuteToggle() {
+  if (!activeCall) return;
+  const m = !activeCall.isMuted();
+  activeCall.mute(m);
+  const b = $('icMute');
+  b.textContent = m ? '🔇 Muted' : '🎙 Mute'; b.style.background = m ? 'var(--amber,#c9a15a)' : ''; b.style.color = m ? '#1c1c1a' : '';
+}
+$('icAccept').onclick = acceptIncoming;
+$('icDecline').onclick = declineIncoming;
+$('icMute').onclick = icMuteToggle;
+$('icHang').onclick = () => { if (activeCall) activeCall.disconnect(); };
+
+async function startCall() {
+  if (!sel) return;
+  if (sel.blocked && !confirm(`${sel.name} is marked do-not-call. Dial anyway?`)) return;
+  const rmp = settings().callSettings.ringMyPhone;
+  if (rmp && rmp.enabled && rmp.number) return startCallViaPhone();
+  if (!device) { window.location.href = 'tel:' + e164(sel.phone); return; }
+  if (activeCall) return;
+  const fromNum = effectiveCallerId(sel);
+  bumpDial(sel); // count every dial, not just dispositioned ones
+  logCallEvent(sel, fromNum, 'manual', 'manual'); // per-number dial volume (no AMD verdict on manual dials)
+  startDialTone(); // instant audio feedback on click
+  try {
+    activeCall = await device.connect({ params: { To: e164(sel.phone), CallerId: fromNum, Timeout: String(settings().callSettings.ringTimeoutSec) } });
+  } catch (e) {
+    stopDialTone();
+    setStatus('call failed: ' + e.message);
+    return;
+  }
+  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
+  if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = ''; }
+  setStatus('calling ' + fmtPhone(sel.phone) + (fromNum && fromNum !== callerId ? ' from ' + fmtPhone(fromNum) : '') + '…');
+  activeCall.on('accept', () => { stopDialTone(); setStatus('connected'); });
+  activeCall.on('cancel', stopDialTone);
+  activeCall.on('error', stopDialTone);
+  activeCall.on('disconnect', () => {
+    stopDialTone();
+    activeCall = null;
+    const cb2 = $('callBtn'), hb2 = $('hangupBtn'), mb2 = $('muteBtn');
+    if (cb2) { cb2.style.display = ''; hb2.style.display = 'none'; mb2.style.display = 'none'; mb2.textContent = '🎙 Mute'; mb2.style.background = ''; mb2.style.color = ''; }
+    setStatus('call ended');
+    if (auto.active && !auto.awaiting) waitForDispo();
+  });
+}
+function waitForDispo() {
+  auto.awaiting = true;
+  autoStatusMsg(`Pick a disposition for <span class="who">${esc(sel ? sel.name : '')}</span> to continue`);
+  const bar = $('dispoBar');
+  if (bar) { bar.classList.add('attention'); $('dispoHint').textContent = 'Pick a disposition to continue auto-dialing →'; }
+}
+function hangUp() { if (activeCall) activeCall.disconnect(); }
+window.startCall = startCall; window.hangUp = hangUp;
+function showBanner(msg) { $('banner').textContent = msg; $('banner').style.display = 'block'; }
+
+// ---------- dashboard ----------
+const DASH_PERIODS = [['today','Today'],['7','7 days'],['30','30 days'],['all','All time']];
+let dashPeriod = '7';
+function parseLogEntry(entry) { // "7/9 No Answer" -> dated event; unstamped entries are undated
+  const m = /^(\d{1,2})\/(\d{1,2})\s+(.*)$/.exec(entry);
+  if (!m) return { date: null, tag: entry };
+  const now = new Date();
+  let d = new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+  if (d.getTime() - now.getTime() > 86400000) d = new Date(now.getFullYear() - 1, Number(m[1]) - 1, Number(m[2]));
+  return { date: d, tag: m[3] };
+}
+function dashEvents() {
+  const ev = [];
+  for (const l of leads) for (const e of (l.log || [])) { const p = parseLogEntry(e); ev.push({ lead: l, date: p.date, tag: p.tag }); }
+  return ev;
+}
+function periodStart(p) {
+  const now = new Date(), d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (p === 'today') return d0;
+  if (p === '7') return new Date(d0.getTime() - 6 * 86400000);
+  if (p === '30') return new Date(d0.getTime() - 29 * 86400000);
+  return null; // all time
+}
+function tagIsContact(tag, cs) { if (cs.has(tag)) return true; for (const n of cs) if (tag.includes(n)) return true; return false; }
+function tagColor(tag) { // inherit the disposition's outcome color; unknown tags read neutral
+  const d = dispos().find(x => x.name === tag) || dispos().find(x => tag.includes(x.name));
+  const c = d ? d.color : 'gray';
+  return ['green', 'amber', 'red'].includes(c) ? `var(--${c})` : 'var(--gray)';
+}
+function renderDash() {
+  const cs = contactSet();
+  const start = periodStart(dashPeriod);
+  const all = dashEvents();
+  const ev = start ? all.filter(e => e.date && e.date >= start) : all;
+  $('dashSeg').innerHTML = DASH_PERIODS.map(([v, lbl]) => `<button class="${dashPeriod === v ? 'on' : ''}" onclick="setDashPeriod('${v}')">${lbl}</button>`).join('');
+  const calls = ev.length;
+  const worked = new Set(ev.map(e => e.lead.id)).size;
+  const reached = ev.filter(e => tagIsContact(e.tag, cs)).length;
+  $('dashTiles').innerHTML = [
+    [calls, 'Calls'], [worked, 'Leads worked'], [reached, 'Reached'],
+    [calls ? Math.round(reached / calls * 100) + '%' : '—', 'Reach rate']
+  ].map(([n, l]) => `<div class="dtile"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join('');
+  // pipeline: current state of every lead
+  const counts = { untouched: 0, attempted: 0, contacted: 0 };
+  for (const l of leads) counts[statusOf(l)]++;
+  const total = leads.length || 1;
+  const segs = [['untouched', 'New', 'var(--gray)'], ['attempted', 'Tried', 'var(--amber)'], ['contacted', 'Reached', 'var(--green)']];
+  $('pipeBar').innerHTML = segs.map(([k, , c]) => counts[k] ? `<div style="background:${c};width:${(counts[k] / total * 100).toFixed(2)}%"></div>` : '').join('');
+  $('pipeLegend').innerHTML = segs.map(([k, lbl, c]) => `<span><span class="dot" style="background:${c}"></span>${lbl} <b>${counts[k]}</b> (${Math.round(counts[k] / total * 100)}%)</span>`).join('');
+  // calls per day, fixed 14-day window
+  const now = new Date(), t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = [];
+  for (let i = 13; i >= 0; i--) days.push(new Date(t0.getTime() - i * 86400000));
+  const byDay = days.map(d => all.filter(e => e.date && e.date.getTime() === d.getTime()).length);
+  const max = Math.max(1, ...byDay);
+  $('dailyChart').innerHTML = days.map((d, i) => {
+    const n = byDay[i];
+    const label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `<div class="dcol" data-tip="${label} — ${n} call${n === 1 ? '' : 's'}"><div class="dbar" style="height:${(n / max * 100).toFixed(1)}%${n ? '' : ';background:var(--line)'}"></div></div>`;
+  }).join('');
+  $('dailyLabels').innerHTML = days.map((d, i) => `<span>${(13 - i) % 2 === 0 ? d.getDate() : ''}</span>`).join('');
+  // disposition tally for the selected period
+  const tally = {};
+  for (const e of ev) tally[e.tag] = (tally[e.tag] || 0) + 1;
+  const rows = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  const top = rows.slice(0, 8);
+  const rest = rows.slice(8).reduce((s, r) => s + r[1], 0);
+  if (rest) top.push(['Other', rest]);
+  const maxR = Math.max(1, ...top.map(r => r[1]));
+  $('dispoHead').textContent = 'Dispositions — ' + DASH_PERIODS.find(p => p[0] === dashPeriod)[1].toLowerCase();
+  $('dispoRows').innerHTML = top.length ? top.map(([nm, n]) => `
+    <div class="drow"><span class="nm" title="${esc(nm)}">${esc(nm)}</span>
+      <div class="track"><div class="fill" style="width:${(n / maxR * 100).toFixed(1)}%;background:${nm === 'Other' ? 'var(--gray)' : tagColor(nm)}"></div></div>
+      <span class="ct">${n}</span></div>`).join('') : '<div class="dashEmpty">No dispositioned calls in this period.</div>';
+  renderCallAnalytics();
+}
+// Number health + best-time-to-call, from the per-dial event log (calls.json).
+// Answer rate = live humans / AMD-rated dials. A number whose today-rate collapses vs its own
+// 7-day average is likely spam-flagged (carriers labeling it → people stop picking up).
+function renderCallAnalytics() {
+  const nh = numberHealth();
+  const entries = Object.entries(nh).sort((a, b) => b[1].dials7 - a[1].dials7);
+  const rate = (c, r) => r ? Math.round(c / r * 100) : null;
+  $('numberHealth').innerHTML = entries.length ? entries.map(([num, n]) => {
+    const r7 = rate(n.connects7, n.rated7), rT = rate(n.connectsToday, n.ratedToday);
+    let flag = '';
+    if (n.ratedToday >= 15 && r7 !== null && r7 >= 4 && rT !== null && rT < r7 / 2) {
+      flag = '<span class="chip red" title="Today\'s answer rate collapsed vs this number\'s 7-day average — carriers may have flagged it as spam">possibly flagged</span>';
+    } else if (n.dialsToday > 150) {
+      flag = '<span class="chip amber" title="Heavy volume on one number burns it faster — spread dials across numbers">high volume today</span>';
+    }
+    return `<div class="drow"><span class="nm" title="${esc(num)}">${fmtPhone(num)}</span>
+      <span class="nhStat">${n.dials7} dials 7d${r7 !== null ? ` · <b>${r7}%</b> answer` : ''}</span>
+      <span class="nhStat">${n.dialsToday} today${rT !== null ? ` · ${rT}%` : ''}</span>
+      ${flag}</div>`;
+  }).join('') : '<div class="dashEmpty">No dials logged yet — this fills in as you dial (auto-dial outcomes are the most accurate).</div>';
+  // best time to call: answer % by the lead's local hour, 8am–9pm
+  const hm = hourlyAnswerMap();
+  const hours = []; for (let h = 8; h <= 20; h++) hours.push(h);
+  const rates = hours.map(h => { const d = hm[h]; return d && d.dials >= 5 ? d.connects / d.dials : null; });
+  const maxRate = Math.max(0.01, ...rates.filter(r => r !== null));
+  $('hourChart').innerHTML = hours.map((h, i) => {
+    const d = hm[h] || { dials: 0, connects: 0 };
+    const r = rates[i];
+    const lbl = `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+    const tip = d.dials ? `${lbl} — ${Math.round((d.connects / d.dials) * 100)}% answered (${d.connects}/${d.dials}${d.dials < 5 ? ', small sample' : ''})` : `${lbl} — no data`;
+    return `<div class="dcol" data-tip="${tip}"><div class="dbar" style="height:${r !== null ? (r / maxRate * 100).toFixed(1) : 2}%${r === null ? ';background:var(--line)' : ''}"></div></div>`;
+  }).join('');
+  $('hourLabels').innerHTML = hours.map(h => `<span>${h % 3 === 0 ? (h % 12 || 12) + (h < 12 ? 'a' : 'p') : ''}</span>`).join('');
+  const ranked = hours.map((h, i) => ({ h, r: rates[i] })).filter(x => x.r !== null).sort((a, b) => b.r - a.r);
+  $('hourHint').textContent = ranked.length >= 3
+    ? `Your best windows so far: ${ranked.slice(0, 3).map(x => `${x.h % 12 || 12}${x.h < 12 ? 'am' : 'pm'}`).join(', ')} (their local time). Auto-dial uses this to order the queue.`
+    : 'Needs ~5+ rated dials per hour before patterns show. Keep dialing — this sharpens with every session.';
+}
+window.setDashPeriod = p => { dashPeriod = p; renderDash(); };
+$('dashBtn').onclick = () => { renderDash(); $('dashModal').style.display = 'flex'; refreshCallStats().then(renderDash); };
+$('closeDash').onclick = () => { $('dashModal').style.display = 'none'; };
+$('dashModal').addEventListener('click', e => { if (e.target.id === 'dashModal') $('dashModal').style.display = 'none'; });
+document.addEventListener('mousemove', e => {
+  const tip = $('dashTip');
+  if (!tip) return;
+  const col = e.target.closest && e.target.closest('.dcol');
+  if (col && col.dataset.tip) {
+    tip.textContent = col.dataset.tip;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 12) + 'px';
+    tip.style.top = (e.clientY - 30) + 'px';
+  } else tip.style.display = 'none';
+});
+
+// ---------- clients & policies (post-sale tracking, Ringy-parity) ----------
+// Separate from leads: a client is created once someone actually buys, optionally linked back
+// to the originating lead via clientId/leadId. Same local-file write-through pattern as leads.
+let clients = [];
+let clientsView = 'list'; // 'list' | 'detail'
+let selClientId = null;
+async function loadClients() { try { clients = await api('/api/clients'); } catch (e) { clients = []; } }
+function ageFromDob(dob) {
+  if (!dob) return '';
+  const d = new Date(dob);
+  if (isNaN(d)) return '';
+  const now = new Date();
+  let a = now.getFullYear() - d.getFullYear();
+  if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) a--;
+  return a;
+}
+function money(n) { const v = Number(String(n ?? '').replace(/[^0-9.-]/g, '')); return v || v === 0 ? '$' + v.toLocaleString() : ''; }
+function fmtDateShort(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+function policyCarriers(c) { return (c.policies || []).map(p => p.carrier).filter(Boolean); }
+
+function renderClientsModal() {
+  $('cmTitle').textContent = clientsView === 'detail' ? 'Client' : 'Clients';
+  $('cmHint').textContent = clientsView === 'detail'
+    ? 'Policies sold to this client.'
+    : `${clients.length} client${clients.length === 1 ? '' : 's'} · ${clients.reduce((n, c) => n + (c.policies || []).length, 0)} polic${clients.reduce((n, c) => n + (c.policies || []).length, 0) === 1 ? 'y' : 'ies'}`;
+  $('cmBody').innerHTML = clientsView === 'detail' ? clientDetailHtml(selClientId) : clientListHtml();
+}
+function clientListHtml() {
+  const rows = clients.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const toolbar = `<div class="clientsToolbar"><button class="primary" onclick="openNewClient()">+ New Client</button><div class="spacer"></div></div>`;
+  if (!rows.length) return toolbar + '<div class="clientsEmpty">No clients yet — sell a lead and convert them, or add one by hand.</div>';
+  const head = `<div class="cRow head"><span>Created</span><span>Name</span><span>Age</span><span>Contact</span><span>Address</span><span>Income</span><span>Occupation</span><span>Policies</span></div>`;
+  const body = rows.map(c => {
+    const carriers = policyCarriers(c);
+    return `<div class="cRow data" onclick="openClientDetail(${c.id})">
+      <span class="cSub">${esc(fmtDateShort(c.createdAt))}</span>
+      <span class="cName">${esc(c.name || '')}</span>
+      <span>${esc(String(ageFromDob(c.dob)))}</span>
+      <span class="cSub">${esc(c.email || '')}${c.email && c.phone ? '<br>' : ''}${esc(fmtPhone(c.phone))}</span>
+      <span class="cSub">${esc([c.city, c.state].filter(Boolean).join(', '))}</span>
+      <span class="cSub">${esc(money(c.annualIncome))}</span>
+      <span class="cSub">${esc(c.occupation || '')}</span>
+      <span class="cPolicies">${carriers.length ? carriers.map(name => `<span class="polChip">${esc(name)}</span>`).join('') : '<span class="cSub">—</span>'}</span>
+    </div>`;
+  }).join('');
+  return toolbar + `<div class="clientTable">${head}${body}</div>`;
+}
+function clientDetailHtml(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return '<div class="clientsEmpty">Client not found.</div>';
+  const back = `<button class="ghost" onclick="backToClientList()">← All clients</button>`;
+  const top = `<div class="clientDetailTop">
+    <div>
+      <h3>${esc(c.name || '')}</h3>
+      <div class="meta">${[fmtPhone(c.phone), c.email, ageFromDob(c.dob) ? ageFromDob(c.dob) + ' yo' : ''].filter(Boolean).join(' · ')}</div>
+    </div>
+    <div class="row" style="gap:8px">
+      ${c.leadId ? `<button onclick="jumpToLead(${c.leadId})" title="Open the originating lead">View lead</button>` : ''}
+      <button onclick="deleteClient(${c.id})" title="Delete this client permanently" style="color:var(--dim)">🗑</button>
+    </div>
+  </div>`;
+  const cards = `<div class="cdCards">
+    <div class="cdCard">
+      <div class="lbl">Contact & personal</div>
+      <div class="val">${esc(c.email || '—')}</div>
+      <div class="val">${esc(fmtPhone(c.phone) || '—')}</div>
+      <div class="val">${c.dob ? esc(fmtDateShort(c.dob)) + ` (${ageFromDob(c.dob)} yo)` : '—'}</div>
+      <div class="val">${esc(c.maritalStatus || '—')}</div>
+    </div>
+    <div class="cdCard">
+      <div class="lbl">Address & work</div>
+      <div class="val">${esc(c.address || '—')}</div>
+      <div class="val">${esc([c.city, c.state, c.zip].filter(Boolean).join(', ') || '—')}</div>
+      <div class="val">${esc(c.occupation || '—')}${c.annualIncome ? ' · ' + esc(money(c.annualIncome)) : ''}</div>
+      <div class="val">${c.leadSource ? 'Source: ' + esc(c.leadSource) : '—'}</div>
+    </div>
+  </div>`;
+  const notes = c.notes ? `<div class="cdCard" style="margin-bottom:18px"><div class="lbl">Notes</div><div class="val">${esc(c.notes)}</div></div>` : '';
+  const polHead = `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h4 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">Policies</h4><button onclick="openNewPolicy(${c.id})">+ Add Policy</button></div>`;
+  const pols = (c.policies || []).slice().sort((a, b) => new Date(b.dateSold || 0) - new Date(a.dateSold || 0));
+  const polList = pols.length ? `<div class="polList">${pols.map(p => `
+    <div class="polCard">
+      <div class="polTop"><b>${esc(p.carrier || 'Unknown carrier')}${p.product ? ' — ' + esc(p.product) : ''}</b>
+        <span><span class="statusChip ${esc((p.status || '').toLowerCase())}">${esc(p.status || '—')}</span>
+        <button class="ghost" onclick="deletePolicy(${c.id},${p.id})" title="Remove this policy">✕</button></span></div>
+      <div class="polGrid">
+        <div><div class="lbl">Policy #</div>${esc(p.policyNumber || '—')}</div>
+        <div><div class="lbl">Coverage</div>${esc(money(p.coverageAmount) || '—')}</div>
+        <div><div class="lbl">Premium</div>${esc(money(p.premiumAmount) || '—')}${p.premiumFrequency ? '/' + esc(p.premiumFrequency) : ''}</div>
+        <div><div class="lbl">Draft day</div>${esc(p.draftDay || '—')}</div>
+        <div><div class="lbl">Date sold</div>${esc(fmtDateShort(p.dateSold) || '—')}</div>
+        <div><div class="lbl">Effective</div>${esc(fmtDateShort(p.effectiveDate) || '—')}</div>
+      </div>
+    </div>`).join('')}</div>` : '<div class="clientsEmpty">No policies logged yet.</div>';
+  return back + top + cards + notes + polHead + polList;
+}
+window.openClientDetail = id => { selClientId = id; clientsView = 'detail'; renderClientsModal(); };
+window.backToClientList = () => { clientsView = 'list'; selClientId = null; renderClientsModal(); };
+window.jumpToLead = id => { $('clientsModal').style.display = 'none'; select(id); };
+window.deleteClient = async id => {
+  const c = clients.find(x => x.id === id);
+  if (!c || !confirm(`Delete ${c.name || 'this client'} and all their policies? This can't be undone.`)) return;
+  await api('/api/clients/' + id, { method: 'DELETE' });
+  clients = clients.filter(x => x.id !== id);
+  backToClientList();
+};
+window.deletePolicy = async (clientId, policyId) => {
+  if (!confirm('Remove this policy?')) return;
+  await api(`/api/clients/${clientId}/policies/${policyId}`, { method: 'DELETE' });
+  const c = clients.find(x => x.id === clientId);
+  if (c) c.policies = (c.policies || []).filter(p => p.id !== policyId);
+  renderClientsModal();
+};
+$('clientsBtn').onclick = () => { clientsView = 'list'; selClientId = null; renderClientsModal(); $('clientsModal').style.display = 'flex'; };
+$('cmCloseBtn').onclick = () => { $('clientsModal').style.display = 'none'; };
+$('clientsModal').addEventListener('click', e => { if (e.target.id === 'clientsModal') $('clientsModal').style.display = 'none'; });
+
+// ---------- new client (blank, or prefilled/linked from a sold lead) ----------
+let ncPrefillLeadId = null;
+function prefillClientFromLead(l) {
+  const w = l.workup || {};
+  const custom = l.custom || {};
+  const take = (...names) => { for (const k of Object.keys(custom)) if (names.includes(k.toLowerCase().trim()) && String(custom[k]).trim()) return String(custom[k]).trim(); return ''; };
+  return {
+    leadId: l.id,
+    name: l.name || '',
+    phone: l.phone || '',
+    email: l.email || '',
+    dob: (w.client && w.client.dob) || '',
+    address: (w.client && w.client.address) || take('address', 'street', 'street address') || '',
+    city: (w.client && w.client.city) || take('city') || '',
+    state: (w.client && w.client.state) || l.state || '',
+    zip: (w.client && w.client.zip) || take('zip', 'zip code', 'postal code') || '',
+    occupation: (w.financial && w.financial.job) || '',
+    annualIncome: (w.financial && w.financial.income) || '',
+    leadSource: l.vendor || '',
+    notes: l.notes || ''
+  };
+}
+function openNewClient(prefill) {
+  const f = prefill || {};
+  ncPrefillLeadId = f.leadId || null;
+  $('ncName').value = f.name || '';
+  $('ncPhone').value = f.phone ? fmtPhone(f.phone) : '';
+  $('ncEmail').value = f.email || '';
+  $('ncDob').value = f.dob || '';
+  $('ncMarital').value = '';
+  $('ncAddress').value = f.address || '';
+  $('ncCity').value = f.city || '';
+  $('ncState').value = f.state || '';
+  $('ncZip').value = f.zip || '';
+  $('ncOccupation').value = f.occupation || '';
+  $('ncIncome').value = f.annualIncome || '';
+  $('ncSource').value = f.leadSource || '';
+  $('ncNotes').value = f.notes || '';
+  $('ncStatus').textContent = '';
+  $('newClientModal').style.display = 'flex';
+  setTimeout(() => $('ncName').focus(), 40);
+}
+function closeNewClient() { $('newClientModal').style.display = 'none'; }
+async function saveNewClient() {
+  const name = $('ncName').value.trim();
+  if (!name) { $('ncStatus').textContent = 'Name is required'; return; }
+  $('ncStatus').textContent = 'Saving…';
+  const row = {
+    leadId: ncPrefillLeadId, name, phone: digits($('ncPhone').value), email: $('ncEmail').value.trim(),
+    dob: $('ncDob').value, maritalStatus: $('ncMarital').value,
+    address: $('ncAddress').value.trim(), city: $('ncCity').value.trim(), state: $('ncState').value.trim().toUpperCase(), zip: $('ncZip').value.trim(),
+    occupation: $('ncOccupation').value.trim(), annualIncome: $('ncIncome').value.trim(),
+    leadSource: $('ncSource').value.trim(), notes: $('ncNotes').value.trim()
+  };
+  try {
+    const created = await api('/api/clients', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(row) });
+    clients.push(created);
+    if (ncPrefillLeadId) {
+      const l = leads.find(x => x.id === ncPrefillLeadId);
+      if (l) { l.clientId = created.id; await patch(l, { clientId: created.id }); renderDetail(); }
+    }
+    closeNewClient();
+    openClientDetail(created.id);
+    $('clientsModal').style.display = 'flex';
+  } catch (e) { $('ncStatus').textContent = 'Save failed: ' + e.message; }
+}
+window.openNewClient = openNewClient;
+$('ncCloseBtn').onclick = closeNewClient;
+$('ncSave').onclick = saveNewClient;
+$('newClientModal').addEventListener('click', e => { if (e.target.id === 'newClientModal') closeNewClient(); });
+
+// convert-to-client entry point from the lead detail pane
+window.convertLeadToClient = () => {
+  if (!sel) return;
+  $('clientsModal').style.display = 'none';
+  openNewClient(prefillClientFromLead(sel));
+};
+
+// ---------- new policy (attached to whichever client is open in detail view) ----------
+let npClientId = null;
+function openNewPolicy(clientId) {
+  npClientId = clientId;
+  const c = clients.find(x => x.id === clientId);
+  $('npWho').textContent = c ? `For ${c.name}` : '';
+  $('npCarrier').value = ''; $('npProduct').value = ''; $('npNumber').value = '';
+  $('npStatus2').value = 'Active';
+  $('npCoverage').value = ''; $('npPremium').value = '';
+  $('npDraftDay').value = ''; $('npFrequency').value = 'monthly';
+  $('npDateSold').value = new Date().toISOString().slice(0, 10);
+  $('npEffective').value = '';
+  $('npStatus').textContent = '';
+  $('newPolicyModal').style.display = 'flex';
+  setTimeout(() => $('npCarrier').focus(), 40);
+}
+function closeNewPolicy() { $('newPolicyModal').style.display = 'none'; }
+async function saveNewPolicy() {
+  if (!npClientId) return;
+  const carrier = $('npCarrier').value.trim();
+  if (!carrier) { $('npStatus').textContent = 'Carrier is required'; return; }
+  $('npStatus').textContent = 'Saving…';
+  const row = {
+    carrier, product: $('npProduct').value.trim(), policyNumber: $('npNumber').value.trim(),
+    status: $('npStatus2').value, coverageAmount: $('npCoverage').value.trim(), premiumAmount: $('npPremium').value.trim(),
+    draftDay: $('npDraftDay').value.trim(), premiumFrequency: $('npFrequency').value,
+    dateSold: $('npDateSold').value, effectiveDate: $('npEffective').value
+  };
+  try {
+    const created = await api(`/api/clients/${npClientId}/policies`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(row) });
+    const c = clients.find(x => x.id === npClientId);
+    if (c) { c.policies = c.policies || []; c.policies.push(created); }
+    closeNewPolicy();
+    renderClientsModal();
+  } catch (e) { $('npStatus').textContent = 'Save failed: ' + e.message; }
+}
+window.openNewPolicy = openNewPolicy;
+$('npCloseBtn').onclick = closeNewPolicy;
+$('npSave').onclick = saveNewPolicy;
+$('newPolicyModal').addEventListener('click', e => { if (e.target.id === 'newPolicyModal') closeNewPolicy(); });
+
+// ---------- import / export ----------
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  let rows = file.name.endsWith('.json') ? JSON.parse(text) : parseCsv(text);
+  if (!Array.isArray(rows)) rows = [rows];
+
+  // Guard: detect a headerless CSV (e.g. a Google Sheets export whose top row was
+  // a divider/blank). Real column headers are never bare phone numbers, ZIPs, or ages.
+  // If the "header" row looks like data, warn — importing would name every column
+  // after row 1's values and silently drop that first lead.
+  if (!file.name.endsWith('.json') && rows.length) {
+    const hdrs = Object.keys(rows[0]).map(h => (h || '').trim());
+    const phoneLike = hdrs.filter(h => h.replace(/\D/g, '').length >= 7 && /^[\d\s().+\-]+$/.test(h));
+    const numericLike = hdrs.filter(h => /^\d{1,5}$/.test(h));
+    if (phoneLike.length || numericLike.length >= 2) {
+      const tell = phoneLike[0] || numericLike[0];
+      const proceed = confirm(
+        'This file looks like it has NO header row — the top row appears to be data (e.g. "' + tell + '").\n\n' +
+        'Importing now would name your columns after the first lead’s values and skip that lead.\n\n' +
+        'Recommended: Cancel, add a header row in your sheet (Name, Phone, Age, City, Zip…), re-export, then import.\n\n' +
+        'Import anyway?'
+      );
+      if (!proceed) { e.target.value = ''; return; }
+    }
+  }
+
+  const isRingyRaw = rows[0] && (rows[0].LeadDispositions !== undefined || (rows[0].phoneNumber !== undefined && rows[0].otherInfo !== undefined));
+
+  const mapped = rows.map(r => isRingyRaw ? mapRingyRaw(r) : mapRow(r));
+  const r = await api('/api/leads', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(mapped) });
+  const src = isRingyRaw ? 'Ringy export (with dispositions, notes, blocked flags)' : 'file';
+  alert(`Imported from ${src}:\n${r.added} new, ${r.updated} updated. Total ${r.total}.`);
+  await load();
+};
+
+// Full Ringy raw-lead mapper — pulls disposition history, notes, blocked, custom fields.
+const RINGY_CONTACT = new Set(['Transferred','Not Interested','Sold','No Sale - Dead End','Hungup On Intro','Interested/ Return back','Scheduled Appointment','Hot Follow Up','Missed Appointment','Need Bank/Social']);
+const NO_CONTACT_STATUSES = new Set(['new', 'unassigned', 'not contacted']);
+function cleanDispo(name) {
+  if (!name) return null;
+  if (/^Transferred/i.test(name)) return 'Transferred';
+  if (name === 'Bad #') return 'Bad Number';
+  return name.trim();
+}
+function mapRingyRaw(l) {
+  const hist = (l.LeadDispositions || []).map(d => cleanDispo((d.Disposition || {}).name)).filter(Boolean);
+  const collapsed = [];
+  for (const name of hist) {
+    const prev = collapsed[collapsed.length - 1];
+    if (prev && prev.base === name) prev.n++;
+    else collapsed.push({ base: name, n: 1 });
+  }
+  const custom = {};
+  for (const f of (l.otherInfo && l.otherInfo.fields || [])) if (f.value != null && f.value !== '') custom[f.field] = String(f.value);
+  if (l.numTimesCalled) custom['Times called (Ringy)'] = String(l.numTimesCalled);
+  if (l.city && l.city !== 'null') custom['City'] = l.city;
+  if (l.zipCode && l.zipCode !== 'null') custom['Zip'] = l.zipCode;
+  return {
+    name: l.name || l.phoneNumber, phone: l.phoneNumber, email: l.email || '',
+    state: l.state || '', birthday: l.birthday || '', notes: l.notes || '',
+    vendor: (l.otherInfo && l.otherInfo.leadVendor) || '', receivedOn: l.receivedOn || '',
+    lastCalledAt: l.lastOutboundCall || null,
+    lastDispo: hist.length ? hist[hist.length - 1] : null,
+    log: collapsed.map(e => e.n > 1 ? `${e.base} ×${e.n}` : e.base),
+    contacted: hist.some(n => RINGY_CONTACT.has(n)) ? true : null,
+    blocked: !!l.isBlocked
+  };
+}
+const KNOWN_FIELDS = { name:1, phone:1, email:1, state:1, birthday:1, notes:1, vendor:1, receivedOn:1, lastDispo:1, lastCalledAt:1, log:1, custom:1, id:1, contacted:1 };
+const BASE_ALIAS = { 'first name':'_fn', firstname:'_fn', 'last name':'_ln', lastname:'_ln', 'full name':'name', fullname:'name',
+  'phone number':'phone', 'phone 1':'phone', mobile:'phone', 'email address':'email', 'lead vendor':'vendor',
+  'received on':'receivedOn', 'date received':'receivedOn', 'birth date':'birthday', dob:'birthday', note:'notes',
+  disposition:'lastDispo', 'last disposition':'lastDispo', status:'lastDispo', result:'lastDispo' };
+// headers a CSV row has that neither KNOWN_FIELDS nor BASE_ALIAS recognize
+function unrecognizedHeaders(headerKeys) {
+  return headerKeys.filter(k => {
+    const lk = k.toLowerCase().trim();
+    return !KNOWN_FIELDS[k] && !BASE_ALIAS[lk] && !KNOWN_FIELDS[lk];
+  });
+}
+function mapRow(r, extraAlias) {
+  const alias = extraAlias ? Object.assign({}, BASE_ALIAS, extraAlias) : BASE_ALIAS;
+  const out = { custom: r.custom || {} };
+  let fn = '', ln = '';
+  for (const [k, v] of Object.entries(r)) {
+    if (v == null || v === '') continue;
+    const lk = k.toLowerCase().trim();
+    const target = KNOWN_FIELDS[k] ? k : alias[lk] || (KNOWN_FIELDS[lk] ? lk : null);
+    if (target === '_fn') fn = v;
+    else if (target === '_ln') ln = v;
+    else if (target) out[target] = v;
+    else out.custom[k] = v;
+  }
+  if (!out.name) out.name = `${fn} ${ln}`.trim() || out.phone || 'Unknown';
+  // if a disposition came through, mark it in the log and derive contacted status —
+  // but a source system's "New"/no-contact label means nothing has happened yet,
+  // which is exactly what leaving lastDispo/log unset already represents here.
+  if (out.lastDispo && !out.log) {
+    const cleaned = cleanDispo(out.lastDispo);
+    if (NO_CONTACT_STATUSES.has(cleaned.toLowerCase())) {
+      delete out.lastDispo;
+    } else {
+      out.lastDispo = cleaned;
+      out.log = [cleaned];
+      if (contactSet().has(cleaned)) out.contacted = true;
+    }
+  }
+  return out;
+}
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i++; }
+        else if (text[i+1] === ',' || text[i+1] === '\n' || text[i+1] === '\r' || text[i+1] === undefined) inQ = false;
+        else field += c; // lone unescaped quote (e.g. 66" for inches) — treat as literal, stay in quotes
+      } else field += c;
+    }
+    else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i+1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some(f => f !== '')) rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field || row.length) { row.push(field); if (row.some(f => f !== '')) rows.push(row); }
+  const header = rows.shift();
+  return rows.map(r => Object.fromEntries(header.map((h, i) => [h, r[i]])));
+}
+$('exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(leads, null, 1)], { type: 'application/json' }));
+  a.download = 'leads-export.json';
+  a.click();
+};
+
+// ---------- boot ----------
+['search', 'dispoFilter', 'stateFilter', 'hideCalledToday'].forEach(id => $(id).addEventListener('input', renderList));
+async function load() {
+  const [ls, cf] = await Promise.all([api('/api/leads'), api('/api/config')]);
+  leads = ls;
+  if (cf) config = cf;
+  loadClients(); // background — only needed when the Clients modal opens
+  refreshCallStats(); // background — feeds best-time queue ordering + the dashboard sections
+  excludeSet = new Set(dispos().filter(d => d.exclude).map(d => d.name));
+  renderExcludeChips();
+  // apply saved auto-dial defaults to the live controls
+  const s = settings();
+  const whoRadio = document.querySelector(`input[name=who][value="${s.autoDial.defaultWho}"]`);
+  if (whoRadio) whoRadio.checked = true;
+  $('skipToday').checked = s.autoDial.skipCalledToday;
+  renderList();
+  if (sel) sel = leads.find(l => l.id === sel.id) || null;
+  renderDetail();
+}
+load().then(initTwilio);
+</script>
+</body>
+</html>
