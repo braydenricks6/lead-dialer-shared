@@ -46,10 +46,16 @@ rm -f "$TMP_ZIP"
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 chmod +x "$DEST/Start Lead Dialer.command" "$DEST/Setup Calling.command" 2>/dev/null || true
 
+# Loose "Lead Dialer" icon directly on the Desktop, matching the Windows installer — otherwise
+# a Mac install just leaves a folder on the Desktop and the app is one level inside it, extra
+# friction for a first-time open. A symlink to the .app bundle double-clicks and launches fine.
+rm -f "$HOME/Desktop/Lead Dialer.app"
+ln -s "$DEST/Lead Dialer.app" "$HOME/Desktop/Lead Dialer.app" 2>/dev/null || true
+
 echo ""
 echo "Done! Lead Dialer is installed at: $DEST"
 echo ""
 echo "Next steps:"
 echo "  1. Open Finder → Desktop → LeadDialer-Mac"
 echo "  2. Double-click Setup Calling.command (one time) to connect your Twilio number"
-echo "  3. Double-click Lead Dialer.app (or Start Lead Dialer.command) any time to open the app"
+echo "  3. From then on, double-click the new \"Lead Dialer\" icon on your Desktop to open the app"
