@@ -703,7 +703,8 @@
       </div>
     </div>
 
-    <div class="row" style="margin-top:16px; justify-content:flex-end">
+    <div class="row" style="margin-top:16px; justify-content:flex-end; align-items:center">
+      <div class="setNote" id="appVersion" style="margin:0 auto 0 0; opacity:.55"></div>
       <button id="closeModal">Done</button>
     </div>
   </div>
@@ -1577,11 +1578,20 @@ async function loadHealthCheck() {
     el.innerHTML = rows.map(([mark, color, text]) => `<div style="color:${color};margin-bottom:4px">${mark} ${esc(text)}</div>`).join('');
   } catch (e) { el.innerHTML = 'Couldn\'t check — ' + esc(e.message); }
 }
+let appVersion = null;
+async function loadAppVersion() {
+  const el = $('appVersion');
+  if (appVersion === null) {
+    try { appVersion = (await api('/api/version')).version || ''; } catch (e) { appVersion = ''; }
+  }
+  el.textContent = appVersion ? ('v' + appVersion) : '';
+}
 function openSettings() {
   const s = settings();
   renderCallerIdStatus();
   loadNumbers();
   loadHealthCheck();
+  loadAppVersion();
   $('ringTimeout').value = s.callSettings.ringTimeoutSec;
   const rmp = s.callSettings.ringMyPhone || { enabled: false, number: '' };
   $('rmpEnabled').checked = !!rmp.enabled;
