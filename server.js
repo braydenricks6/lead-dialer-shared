@@ -476,7 +476,22 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/changelog' && req.method === 'GET') {
       const cf = path.join(__dirname, 'CHANGELOG.md');
-      return json(res, 200, { text: fs.existsSync(cf) ? fs.readFileSync(cf, 'utf8') : '' });
+      if (fs.existsSync(cf)) return json(res, 200, { text: fs.readFileSync(cf, 'utf8') });
+      // Self-update only ever pulls server.js/index.html, so an install from before this
+      // feature shipped has no local CHANGELOG.md yet — fetch it once and cache it locally
+      // (same self-heal pattern used for the missing-twilio.min.js gotcha).
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 4000);
+        const r = await fetch('https://raw.githubusercontent.com/braydenricks6/lead-dialer-shared/main/CHANGELOG.md', { signal: ctrl.signal });
+        clearTimeout(t);
+        if (r.ok) {
+          const text = await r.text();
+          fs.writeFileSync(cf, text);
+          return json(res, 200, { text });
+        }
+      } catch (e) {}
+      return json(res, 200, { text: '' });
     }
     if (p === '/api/config' && req.method === 'GET') {
       const cf = path.join(__dirname, 'config.json');
