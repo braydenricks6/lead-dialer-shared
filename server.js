@@ -363,9 +363,11 @@ async function enableInbound(numbers) {
   const inboundUrl = `https://${domain}/inbound`;
   const owned = await twilioApi('/IncomingPhoneNumbers.json?PageSize=50');
   const want = Array.isArray(numbers) && numbers.length ? new Set(numbers) : null;
+  const excluded = new Set((readConfig().callSettings || {}).excludedNumbers || []);
   const configured = [];
   for (const n of (owned.incoming_phone_numbers || [])) {
     if (want && !want.has(n.phone_number)) continue;
+    if (!want && excluded.has(n.phone_number)) continue; // "all owned" default skips numbers hidden from this app
     if (!n.capabilities || !n.capabilities.voice) continue;
     // a number routes to EITHER a VoiceUrl or a VoiceApplicationSid — set the URL, clear the app
     await twilioApi(`/IncomingPhoneNumbers/${n.sid}.json`, 'POST', { VoiceUrl: inboundUrl, VoiceMethod: 'POST', VoiceApplicationSid: '' });
@@ -653,9 +655,44 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/twilio/numbers' && req.method === 'GET') {
       const j = await twilioApi('/IncomingPhoneNumbers.json?PageSize=100');
       const active = activeCallerId();
+      const excluded = new Set((readConfig().callSettings || {}).excludedNumbers || []);
       return json(res, 200, (j.incoming_phone_numbers || []).map(n => ({
-        phoneNumber: n.phone_number, friendlyName: n.friendly_name, active: n.phone_number === active
+        phoneNumber: n.phone_number, friendlyName: n.friendly_name, active: n.phone_number === active,
+        excluded: excluded.has(n.phone_number)
       })));
+    }
+    // hides/unhides an owned number from this app entirely — for numbers used by another
+    // system (e.g. a texting-only number on the same Twilio account) that shouldn't show up
+    // as a caller ID option, an auto-state-switch target, or get swept into "enable inbound"'s
+    // all-owned-numbers default. Excluding a number also clears any voice webhook this app
+    // previously pointed at it and scrubs it from this app's other local per-number settings —
+    // it stops being "one of ours" in every sense, without touching the number in Twilio itself.
+    if (p === '/api/twilio/exclude' && req.method === 'POST') {
+      const { phoneNumber, excluded: wantExcluded } = await body(req);
+      if (!phoneNumber) return json(res, 400, { error: 'phoneNumber required' });
+      const cfg = readConfig();
+      const cs = cfg.callSettings || {};
+      const list = (cs.excludedNumbers || []).filter(n => n !== phoneNumber);
+      if (wantExcluded) list.push(phoneNumber);
+      cfg.callSettings = Object.assign({}, cs, { excludedNumbers: list });
+      if (wantExcluded) {
+        // scrub it from every other per-number setting so it's fully out of the CRM's hands
+        const ass = cfg.callSettings.autoStateSwitch;
+        if (ass && Array.isArray(ass.entries)) ass.entries = ass.entries.filter(e => e.number !== phoneNumber);
+        if (Array.isArray(cfg.callSettings.inboundNumbers)) cfg.callSettings.inboundNumbers = cfg.callSettings.inboundNumbers.filter(n => n !== phoneNumber);
+        if (cfg.callSettings.numberRegistrations) delete cfg.callSettings.numberRegistrations[phoneNumber];
+        // if this app had pointed its voice webhook at the number, clear it back to blank —
+        // Twilio's own default (plain ringing, no app behind it), not deleted from the account.
+        try {
+          const owned = await twilioApi(`/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(phoneNumber)}`);
+          const n = (owned.incoming_phone_numbers || [])[0];
+          if (n && (n.voice_url || '').includes('.twil.io/')) {
+            await twilioApi(`/IncomingPhoneNumbers/${n.sid}.json`, 'POST', { VoiceUrl: '', VoiceApplicationSid: '' });
+          }
+        } catch (e) { /* best-effort — exclusion still applies locally even if this fails */ }
+      }
+      writeConfig(cfg);
+      return json(res, 200, { ok: true, excludedNumbers: cfg.callSettings.excludedNumbers });
     }
     if (p === '/api/twilio/available' && req.method === 'GET') {
       const q = (url.searchParams.get('q') || '').trim();

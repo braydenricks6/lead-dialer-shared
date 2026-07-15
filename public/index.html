@@ -1364,15 +1364,23 @@ async function loadNumbers() {
   if (!device) { $('numberList').innerHTML = '<span class="setNote">Set up calling first (run Setup Calling) to manage numbers here.</span>'; return; }
   try {
     const list = await api('/api/twilio/numbers');
-    $('numberList').innerHTML = list.length ? list.map(n => `
+    const shown = list.filter(n => !n.excluded);
+    const hidden = list.filter(n => n.excluded);
+    $('numberList').innerHTML = (shown.length ? shown.map(n => `
       <div class="setRow">
         <label style="flex:1"><input type="radio" name="activeNum" value="${esc(n.phoneNumber)}" ${n.active ? 'checked' : ''} onchange="setActiveNumber('${esc(n.phoneNumber)}')"> ${esc(fmtPhone(n.phoneNumber))}${n.friendlyName ? ' — ' + esc(n.friendlyName) : ''}</label>
-        ${n.active ? '<span class="chip green">active</span>' : ''}
-      </div>`).join('') : '<span class="setNote">No numbers yet — search below to buy one.</span>';
-    renderStateSwitch(list);
-    renderRegistrations(list);
+        ${n.active ? '<span class="chip green">active</span>' : `<a onclick="toggleNumberExcluded('${esc(n.phoneNumber)}', true)" style="color:var(--dim);cursor:pointer">· hide from CRM</a>`}
+      </div>`).join('') : '<span class="setNote">No numbers yet — search below to buy one.</span>')
+      + (hidden.length ? `<div class="setNote" style="margin-top:8px">Hidden from this app (still active in Twilio): ${hidden.map(n => `${esc(fmtPhone(n.phoneNumber))} <a onclick="toggleNumberExcluded('${esc(n.phoneNumber)}', false)" style="cursor:pointer;text-decoration:underline">unhide</a>`).join(' · ')}</div>` : '');
+    renderStateSwitch(shown);
+    renderRegistrations(shown);
   } catch (e) { $('numberList').innerHTML = '<span class="setNote">Couldn\'t load numbers — ' + esc(e.message) + '</span>'; }
 }
+window.toggleNumberExcluded = async (num, excluded) => {
+  if (excluded && !confirm(`Hide ${fmtPhone(num)} from this app? It stays active in Twilio (e.g. for texting elsewhere) — this just removes it as a caller ID / inbound-routing option here.`)) return;
+  await api('/api/twilio/exclude', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num, excluded }) });
+  loadNumbers();
+};
 function regMap() { return settings().callSettings.numberRegistrations || {}; }
 function renderRegistrations(list) {
   const el = $('regList');
