@@ -674,12 +674,22 @@ const server = http.createServer(async (req, res) => {
       })));
     }
     if (p === '/api/twilio/numbers' && req.method === 'POST') {
-      const { phoneNumber } = await body(req);
+      const { phoneNumber, region } = await body(req);
       if (!phoneNumber) return json(res, 400, { error: 'phoneNumber required' });
       const j = await twilioApi('/IncomingPhoneNumbers.json', 'POST', { PhoneNumber: phoneNumber, FriendlyName: 'lead-dialer' });
       // newly bought number becomes active immediately
       const cfg = readConfig();
       cfg.callSettings = Object.assign({}, cfg.callSettings, { callerId: j.phone_number });
+      // the search result already told us which state this number is from — pre-assign it for
+      // auto state-based caller ID switching so it's not left "Not assigned" until someone
+      // remembers to set it by hand in Settings.
+      const st = region ? String(region).toUpperCase() : null;
+      if (st && STATE_ABBRS.has(st)) {
+        const ass = Object.assign({ enabled: false, entries: [] }, cfg.callSettings.autoStateSwitch);
+        const entries = (ass.entries || []).filter(e => e.number !== j.phone_number);
+        entries.push({ number: j.phone_number, state: st });
+        cfg.callSettings.autoStateSwitch = Object.assign({}, ass, { entries });
+      }
       writeConfig(cfg);
       return json(res, 200, { phoneNumber: j.phone_number, sid: j.sid });
     }

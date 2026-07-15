@@ -675,8 +675,6 @@
       <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="handsFree"> Hands-free dialing — auto-mark voicemail &amp; no-answer, only stop for live people</label></div>
       <div class="setRow" id="attemptsRow"><label>Dial each lead <input type="number" id="attemptsPerLead" min="1" max="5" style="width:56px"> time(s) before moving on</label></div>
       <div class="setNote">Dials one lead at a time with answering-machine detection. A machine pickup is auto-marked <b>Straight to Voicemail</b>, a full ring with no pickup is auto-marked <b>No Answer</b>, and it keeps going on its own — it only rings your browser (with a beep) when a <b>real person</b> answers. Walk away and come back when you hear the beep.</div>
-      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="parallelEnabled"> Dial 3 leads at once (raw parallel)</label></div>
-      <div class="setNote"><b>Currently limited by your Twilio account:</b> 3-at-once needs 4 simultaneous calls, and the account's concurrency cap blocks 2 of the 3 legs (they fail instantly). Until Twilio raises the limit, hands-free single-line above is the better mode. Also carries the TCPA abandoned-call tradeoff — if two people answer at once, one gets a silent hangup.</div>
     </div>
 
     <div class="setSection">
@@ -712,7 +710,7 @@
 let leads = [], sel = null, device = null, activeCall = null, callerId = null;
 let config = { dispositions: null };
 const DEFAULT_SETTINGS = {
-  autoDial: { defaultWho: 'notReached', skipCalledToday: true, advanceDelaySec: 3, parallelEnabled: false, handsFree: true, attemptsPerLead: 1,
+  autoDial: { defaultWho: 'notReached', skipCalledToday: true, advanceDelaySec: 3, handsFree: true, attemptsPerLead: 1,
     // retry cadence: gaps[n-1] = days a lead rests after its nth dial (last value repeats).
     // maxAttempts 0 = never archive. Due callbacks always bypass the cadence.
     cadence: { enabled: true, gaps: [1, 3, 7, 14], maxAttempts: 0 } },
@@ -1032,7 +1030,7 @@ function buildProfile(l) {
     ${rest.length ? `<details class="moreFields"><summary>More details (${rest.length})</summary><div class="fields">${rest.map(([k, v]) => `<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}</div></details>` : ''}`;
 }
 // ---------- workup (application capture, Ringy-style tabs) ----------
-// Stored as lead.workup (nested object on the lead). SSN/DL/banking are
+// Stored as lead.workup (jsonb through Supabase like everything else). SSN/DL/banking are
 // encrypted server-side at rest and masked in the UI (password inputs + reveal toggle).
 let workupTab = 'client', workupReveal = false, wSaveTimer = null;
 const W_SENSITIVE = new Set(['client.ssn', 'client.dl', 'client.bank', 'client.routing', 'client.account', 'client2.ssn', 'client2.dl']);
@@ -1446,16 +1444,25 @@ $('searchNumbers').onclick = async () => {
     $('numberResults').innerHTML = results.length ? results.map(n => `
       <div class="setRow">
         <span style="flex:1">${esc(fmtPhone(n.phoneNumber))}${n.locality ? ' — ' + esc(n.locality) + ', ' + esc(n.region) : ''}</span>
-        <button class="primary" style="padding:6px 12px;font-size:12.5px" onclick="buyNumber('${esc(n.phoneNumber)}')">Buy — ~$1.15/mo</button>
+        <button class="primary" style="padding:6px 12px;font-size:12.5px" onclick="buyNumber('${esc(n.phoneNumber)}','${esc(n.region || '')}')">Buy — ~$1.15/mo</button>
       </div>`).join('') : '<span class="setNote">No numbers found for "' + esc(q) + '".</span>';
   } catch (e) { $('numberResults').innerHTML = '<span class="setNote">' + esc(e.message) + '</span>'; }
 };
 $('newAreaCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('searchNumbers').click(); });
-window.buyNumber = async num => {
+window.buyNumber = async (num, region) => {
   if (!confirm(`Buy ${fmtPhone(num)} for about $1.15/month, billed to your Twilio balance?`)) return;
   try {
-    await api('/api/twilio/numbers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num }) });
-    config.callSettings = Object.assign({}, settings().callSettings, { callerId: num });
+    await api('/api/twilio/numbers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num, region }) });
+    const cs = settings().callSettings;
+    // mirror the server's auto state-assignment locally so Settings shows it without a reload
+    if (region) {
+      const ass = Object.assign({ enabled: false, entries: [] }, cs.autoStateSwitch);
+      const entries = (ass.entries || []).filter(e => e.number !== num);
+      entries.push({ number: num, state: region });
+      config.callSettings = Object.assign({}, cs, { callerId: num, autoStateSwitch: Object.assign({}, ass, { entries }) });
+    } else {
+      config.callSettings = Object.assign({}, cs, { callerId: num });
+    }
     callerId = num;
     $('numberResults').innerHTML = ''; $('newAreaCode').value = '';
     renderCallerIdStatus();
@@ -1479,10 +1486,9 @@ function openSettings() {
   $('cadMax').value = cad.maxAttempts || 0;
   $('cadRow').style.display = cad.enabled ? '' : 'none';
   $('advanceDelay').value = s.autoDial.advanceDelaySec;
-  $('parallelEnabled').checked = !!s.autoDial.parallelEnabled;
   $('handsFree').checked = !!s.autoDial.handsFree;
   $('attemptsPerLead').value = s.autoDial.attemptsPerLead || 1;
-  $('attemptsRow').style.display = s.autoDial.handsFree ? '' : 'none';
+  $('attemptsRow').style.display = (s.autoDial.handsFree || rmp.enabled) ? '' : 'none';
   populateHourSelects();
   $('hoursEnabled').checked = s.callingHours.enabled;
   $('hoursStart').value = s.callingHours.startHour;
@@ -1529,9 +1535,15 @@ function saveRingMyPhone(patch) {
   const cur = settings().callSettings.ringMyPhone || { enabled: false, number: '' };
   saveSetting('callSettings', 'ringMyPhone', Object.assign({}, cur, patch));
 }
+// "attempts per lead" applies to both hands-free single-line AND ring-my-phone session
+// dialing, so it should show whenever either one is on, not just hands-free alone.
+function updateAttemptsRowVisibility() {
+  $('attemptsRow').style.display = ($('handsFree').checked || $('rmpEnabled').checked) ? '' : 'none';
+}
 $('rmpEnabled').addEventListener('change', e => {
   saveRingMyPhone({ enabled: e.target.checked });
   $('rmpNumRow').style.display = e.target.checked ? '' : 'none';
+  updateAttemptsRowVisibility();
 });
 $('rmpNumber').addEventListener('change', e => saveRingMyPhone({ number: e.target.value.trim() }));
 $('defDefaultWho').addEventListener('change', e => saveSetting('autoDial', 'defaultWho', e.target.value));
@@ -1552,28 +1564,9 @@ $('cadEnabled').addEventListener('change', saveCadence);
 $('cadGaps').addEventListener('change', saveCadence);
 $('cadMax').addEventListener('change', saveCadence);
 $('advanceDelay').addEventListener('change', e => saveSetting('autoDial', 'advanceDelaySec', Math.max(0, Math.min(15, Number(e.target.value) || 0))));
-$('parallelEnabled').addEventListener('change', async e => {
-  saveSetting('autoDial', 'parallelEnabled', e.target.checked);
-  if (e.target.checked && $('handsFree').checked) { $('handsFree').checked = false; saveSetting('autoDial', 'handsFree', false); $('attemptsRow').style.display = 'none'; }
-  if (e.target.checked) {
-    const note = $('settingsQueueInfo');
-    const prevHtml = note ? note.innerHTML : '';
-    if (note) note.innerHTML = 'Setting up parallel dialing on your Twilio account (one-time, ~10–20s)…';
-    try {
-      await api('/api/twilio/parallel-setup', { method: 'POST' });
-      if (note) note.innerHTML = '✓ Parallel dialing is ready.';
-      setTimeout(() => { if (note) note.innerHTML = prevHtml; }, 2500);
-    } catch (err) {
-      if (note) note.innerHTML = '<span style="color:var(--red)">Parallel setup failed: ' + esc(err.message) + '</span>';
-      e.target.checked = false;
-      saveSetting('autoDial', 'parallelEnabled', false);
-    }
-  }
-});
 $('handsFree').addEventListener('change', e => {
   saveSetting('autoDial', 'handsFree', e.target.checked);
-  $('attemptsRow').style.display = e.target.checked ? '' : 'none';
-  if (e.target.checked && $('parallelEnabled').checked) { $('parallelEnabled').checked = false; saveSetting('autoDial', 'parallelEnabled', false); } // one auto mode at a time
+  updateAttemptsRowVisibility();
 });
 $('attemptsPerLead').addEventListener('change', e => saveSetting('autoDial', 'attemptsPerLead', Math.max(1, Math.min(5, Number(e.target.value) || 1))));
 $('hoursEnabled').addEventListener('change', e => { saveSetting('callingHours', 'enabled', e.target.checked); updateQueueInfo(); });
@@ -1761,9 +1754,8 @@ async function dialCurrent() {
   if (rmp && rmp.enabled && rmp.number) {
     const session = await ensureAutoSession();
     if (!session) return; // stopAuto() already fired, or still connecting — nothing more to do here
-    return dialSessionBatch(session, settings().autoDial.parallelEnabled ? 3 : 1);
+    return dialSessionLead(session);
   }
-  if (settings().autoDial.parallelEnabled && device) return runParallelBatch();
   if (settings().autoDial.handsFree && device) return dialSingleAuto();
   const lead = auto.queue[auto.idx];
   select(lead.id);
@@ -1895,86 +1887,6 @@ async function logOutcome(lead, tag) {
   }
   await patch(lead, { lastDispo: lead.lastDispo, lastCalledAt: lead.lastCalledAt, log: lead.log });
 }
-async function processParallelLegs(result, batch) {
-  const tasks = [];
-  for (const leg of result.legs) {
-    if (leg.leadId === result.winner || leg.outcome === 'canceled') continue;
-    const lead = batch.find(l => l.id === leg.leadId);
-    if (lead) tasks.push(logOutcome(lead, PARALLEL_OUTCOME_DISPO[leg.outcome] || 'No Answer'));
-  }
-  await Promise.all(tasks);
-  renderList();
-}
-
-// Browser-WebRTC parallel dialing (ring-my-phone OFF). When ring-my-phone is ON,
-// dialCurrent() uses the persistent-session path (ensureAutoSession + dialSessionBatch)
-// instead — one phone ring per whole auto-dial session, not one per batch.
-async function runParallelBatch() {
-  const batch = auto.queue.slice(auto.idx, auto.idx + 3);
-  if (!batch.length) return dialCurrent();
-  auto._batchSize = batch.length;
-  batch.forEach(l => bumpDial(l)); // count each leg dialed
-  autoStatusMsg(`Dialing <span class="who">${batch.map(l => esc(l.name)).join(', ')}</span> — ${auto.idx + 1}–${auto.idx + batch.length} of ${auto.queue.length}`);
-  const room = 'pd-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
-  let ended = false;
-  startDialTone();
-  try {
-    activeCall = await device.connect({ params: { Mode: 'parallel', Room: room, Timeout: String(settings().callSettings.ringTimeoutSec) } });
-  } catch (e) {
-    stopDialTone();
-    showBanner('Parallel dial failed to start: ' + e.message);
-    auto.idx += batch.length; auto._batchSize = 0;
-    return auto.active ? autoAdvanceDelay() : undefined;
-  }
-  const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
-  if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = ''; }
-  setStatus('dialing ' + batch.length + ' leads at once…');
-  // NOTE: do NOT stop the ringback on 'accept' here — in parallel mode 'accept' fires the
-  // instant the agent joins the (still-empty) conference. Keep ringing until a lead actually
-  // connects (winner resolved below), so there's no dead-air/hold-music gap while leads ring.
-  activeCall.on('cancel', stopDialTone);
-  activeCall.on('error', stopDialTone);
-  activeCall.on('disconnect', () => {
-    stopDialTone();
-    ended = true;
-    activeCall = null;
-    resetCallUI();
-    setStatus('call ended');
-  });
-
-  let result;
-  try {
-    result = await api('/api/twilio/parallel-dial', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        room,
-        ringTimeoutSec: settings().callSettings.ringTimeoutSec,
-        calls: batch.map(l => ({ leadId: l.id, to: e164(l.phone), callerId: effectiveCallerId(l), leadState: normState(l.state) || null }))
-      })
-    });
-  } catch (e) {
-    showBanner('Parallel dial failed: ' + e.message);
-    if (activeCall) hangUp();
-    auto.idx += batch.length; auto._batchSize = 0;
-    return auto.active ? autoAdvanceDelay() : undefined;
-  }
-
-  await processParallelLegs(result, batch);
-
-  if (result.winner) {
-    stopDialTone(); // a human connected — stop the ringback
-    const lead = batch.find(l => l.id === result.winner);
-    select(lead.id);
-    setStatus('connected — parallel batch');
-    autoStatusMsg(`Connected: <span class="who">${esc(lead.name)}</span> — pick a disposition to continue`);
-    if (!ended) waitForDispo();
-  } else {
-    stopDialTone(); // nobody answered — stop the ringback before advancing
-    if (activeCall) hangUp();
-    auto.idx += batch.length; auto._batchSize = 0;
-    autoAdvanceDelay();
-  }
-}
 // ---------- persistent session dialing (ring-my-phone during auto-dial) ----------
 // Rings the agent's phone ONCE for the whole auto-dial session — they answer, stay
 // parked in a Twilio conference, and each subsequent lead (or batch of 3) is dialed
@@ -2040,41 +1952,55 @@ async function ensureAutoSession() {
   while (auto.active && auto.session && !auto.session.ready) await sleep(500);
   return (auto.active && auto.session && auto.session.ready) ? auto.session : null;
 }
-async function dialSessionBatch(session, batchSize) {
-  const batch = auto.queue.slice(auto.idx, auto.idx + batchSize);
-  if (!batch.length) return dialCurrent();
-  auto._batchSize = batch.length;
-  select(batch[0].id); // show the lead being dialed right away, not just once someone answers
-  autoStatusMsg(`Dialing <span class="who">${batch.map(l => esc(l.name)).join(', ')}</span> — ${auto.idx + 1}–${auto.idx + batch.length} of ${auto.queue.length}`);
-  setStatus('dialing ' + batch.length + ' lead' + (batch.length > 1 ? 's' : '') + '…');
-  let result;
-  try {
-    result = await api('/api/twilio/parallel-dial', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        room: session.room,
-        ringTimeoutSec: settings().callSettings.ringTimeoutSec,
-        calls: batch.map(l => ({ leadId: l.id, to: e164(l.phone), callerId: effectiveCallerId(l), leadState: normState(l.state) || null }))
-      })
-    });
-  } catch (e) {
-    showBanner('Dial failed: ' + e.message);
-    auto.idx += batch.length; auto._batchSize = 0;
-    return auto.active ? autoAdvanceDelay() : undefined;
+// Dials the current queue lead into the ring-my-phone session, retrying the SAME lead up to
+// attemptsPerLead times (matching hands-free single-line's retry behavior) before moving on —
+// only advances to the next lead once every attempt has gone unanswered.
+async function dialSessionLead(session) {
+  const lead = auto.queue[auto.idx];
+  if (!lead) return dialCurrent();
+  auto._batchSize = 1;
+  select(lead.id); // show the lead being dialed right away, not just once someone answers
+  const maxTries = Math.max(1, Math.min(5, settings().autoDial.attemptsPerLead || 1));
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    if (!auto.active || !auto.session) return;
+    autoStatusMsg(`Dialing <span class="who">${esc(lead.name)}</span>${maxTries > 1 ? ` — try ${attempt}/${maxTries}` : ''} <span style="color:var(--dim)">(${auto.idx + 1} of ${auto.queue.length})</span>`);
+    setStatus('dialing ' + fmtPhone(lead.phone) + '…');
+    await bumpDial(lead);
+    renderList();
+    let result;
+    try {
+      result = await api('/api/twilio/parallel-dial', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          room: session.room,
+          ringTimeoutSec: settings().callSettings.ringTimeoutSec,
+          calls: [{ leadId: lead.id, to: e164(lead.phone), callerId: effectiveCallerId(lead), leadState: normState(lead.state) || null }]
+        })
+      });
+    } catch (e) {
+      showBanner('Dial failed: ' + e.message);
+      break;
+    }
+    if (!auto.session) return; // session ended while this dial was in flight
+    if (result.winner) {
+      if (session.shim) session.shim.currentLegSid = result.winnerSid;
+      select(lead.id);
+      setStatus('connected — on your phone');
+      autoStatusMsg(`Connected: <span class="who">${esc(lead.name)}</span> — pick a disposition to continue`);
+      waitForDispo();
+      return;
+    }
+    const leg = (result.legs || [])[0];
+    const tag = PARALLEL_OUTCOME_DISPO[leg && leg.outcome] || 'No Answer';
+    await logOutcome(lead, tag);
+    auto.lastResult = `${esc(lead.name)} → ${tag}`;
+    renderList(); renderDetail();
+    if (leg && leg.outcome === 'failed') break; // bad/unreachable number — don't keep retrying
+    if (attempt < maxTries) await sleep(1000);
   }
-  if (!auto.session) return; // session ended while this batch was dialing
-  await processParallelLegs(result, batch);
-  if (result.winner) {
-    const lead = batch.find(l => l.id === result.winner);
-    if (session.shim) session.shim.currentLegSid = result.winnerSid;
-    select(lead.id);
-    setStatus('connected — on your phone');
-    autoStatusMsg(`Connected: <span class="who">${esc(lead.name)}</span> — pick a disposition to continue`);
-    waitForDispo();
-  } else {
-    auto.idx += batch.length; auto._batchSize = 0;
-    autoAdvanceDelay();
-  }
+  if (!auto.active) return;
+  auto.idx += 1; auto._batchSize = 0;
+  autoAdvanceDelay();
 }
 
 function autoAdvance() {
@@ -2547,7 +2473,7 @@ document.addEventListener('mousemove', e => {
 
 // ---------- clients & policies (post-sale tracking, Ringy-parity) ----------
 // Separate from leads: a client is created once someone actually buys, optionally linked back
-// to the originating lead via clientId/leadId. Same local-file write-through pattern as leads.
+// to the originating lead via clientId/leadId. Same write-through local+Supabase pattern as leads.
 let clients = [];
 let clientsView = 'list'; // 'list' | 'detail'
 let selClientId = null;
