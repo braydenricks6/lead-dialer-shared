@@ -2487,17 +2487,21 @@ function showBanner(msg) { $('banner').textContent = msg; $('banner').style.disp
 // ---------- dashboard ----------
 const DASH_PERIODS = [['today','Today'],['7','7 days'],['30','30 days'],['all','All time']];
 let dashPeriod = '7';
-function parseLogEntry(entry) { // "7/9 No Answer" -> dated event; unstamped entries are undated
+function parseLogEntry(entry) { // "7/9 No Answer ×3" -> dated event with count 3; unstamped entries are undated
   const m = /^(\d{1,2})\/(\d{1,2})\s+(.*)$/.exec(entry);
-  if (!m) return { date: null, tag: entry };
+  const raw = m ? m[3] : entry;
+  const cm = /^(.*)\s×(\d+)$/.exec(raw);
+  const tag = cm ? cm[1] : raw;
+  const count = cm ? parseInt(cm[2], 10) : 1;
+  if (!m) return { date: null, tag, count };
   const now = new Date();
   let d = new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]));
   if (d.getTime() - now.getTime() > 86400000) d = new Date(now.getFullYear() - 1, Number(m[1]) - 1, Number(m[2]));
-  return { date: d, tag: m[3] };
+  return { date: d, tag, count };
 }
 function dashEvents() {
   const ev = [];
-  for (const l of leads) for (const e of (l.log || [])) { const p = parseLogEntry(e); ev.push({ lead: l, date: p.date, tag: p.tag }); }
+  for (const l of leads) for (const e of (l.log || [])) { const p = parseLogEntry(e); ev.push({ lead: l, date: p.date, tag: p.tag, count: p.count }); }
   return ev;
 }
 function periodStart(p) {
@@ -2519,9 +2523,9 @@ function renderDash() {
   const all = dashEvents();
   const ev = start ? all.filter(e => e.date && e.date >= start) : all;
   $('dashSeg').innerHTML = DASH_PERIODS.map(([v, lbl]) => `<button class="${dashPeriod === v ? 'on' : ''}" onclick="setDashPeriod('${v}')">${lbl}</button>`).join('');
-  const calls = ev.length;
+  const calls = ev.reduce((s, e) => s + e.count, 0);
   const worked = new Set(ev.map(e => e.lead.id)).size;
-  const reached = ev.filter(e => tagIsContact(e.tag, cs)).length;
+  const reached = ev.filter(e => tagIsContact(e.tag, cs)).reduce((s, e) => s + e.count, 0);
   $('dashTiles').innerHTML = [
     [calls, 'Calls'], [worked, 'Leads worked'], [reached, 'Reached'],
     [calls ? Math.round(reached / calls * 100) + '%' : '—', 'Reach rate']
@@ -2537,7 +2541,7 @@ function renderDash() {
   const now = new Date(), t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const days = [];
   for (let i = 13; i >= 0; i--) days.push(new Date(t0.getTime() - i * 86400000));
-  const byDay = days.map(d => all.filter(e => e.date && e.date.getTime() === d.getTime()).length);
+  const byDay = days.map(d => all.filter(e => e.date && e.date.getTime() === d.getTime()).reduce((s, e) => s + e.count, 0));
   const max = Math.max(1, ...byDay);
   $('dailyChart').innerHTML = days.map((d, i) => {
     const n = byDay[i];
@@ -2547,7 +2551,7 @@ function renderDash() {
   $('dailyLabels').innerHTML = days.map((d, i) => `<span>${(13 - i) % 2 === 0 ? d.getDate() : ''}</span>`).join('');
   // disposition tally for the selected period
   const tally = {};
-  for (const e of ev) tally[e.tag] = (tally[e.tag] || 0) + 1;
+  for (const e of ev) tally[e.tag] = (tally[e.tag] || 0) + e.count;
   const rows = Object.entries(tally).sort((a, b) => b[1] - a[1]);
   const top = rows.slice(0, 8);
   const rest = rows.slice(8).reduce((s, r) => s + r[1], 0);

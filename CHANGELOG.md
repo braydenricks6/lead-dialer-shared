@@ -1,3 +1,6 @@
+## v11 — Fixed Stats dashboard undercounting retried calls
+- Dispositions that get retried and collapsed into one log line (e.g. "No Answer ×3") were being tallied as a separate bucket from plain "No Answer," and counted as 1 call instead of 3. Fixed for the Calls tile, Reach rate, the 14-day chart, and the disposition breakdown — all now merge and count correctly.
+
 ## v10 — What's New in Settings
 - Settings now shows a "What's New" link next to the version number, listing recent updates like this one.
 
