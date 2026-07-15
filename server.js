@@ -683,8 +683,33 @@ const server = http.createServer(async (req, res) => {
       writeConfig(cfg);
       return json(res, 200, { ok: true });
     }
+    // One-glance setup diagnostics — surfaces the exact things that have actually tripped up
+    // real installs (trial account restrictions, no active caller ID, backend never deployed,
+    // unregistered numbers) in one place instead of a coworker hitting each as a separate
+    // cryptic error and messaging for help.
+    if (p === '/api/twilio/health' && req.method === 'GET') {
+      const need = ['TWILIO_ACCOUNT_SID', 'TWILIO_API_KEY', 'TWILIO_API_SECRET', 'TWILIO_TWIML_APP_SID'];
+      const missing = need.filter(k => !env[k]);
+      if (missing.length) return json(res, 200, { configured: false });
+      const cfg = readConfig();
+      const cs = cfg.callSettings || {};
+      let numbers = [];
+      try {
+        const excluded = new Set(cs.excludedNumbers || []);
+        const regs = cs.numberRegistrations || {};
+        const owned = await twilioApi('/IncomingPhoneNumbers.json?PageSize=100');
+        numbers = (owned.incoming_phone_numbers || [])
+          .filter(n => !excluded.has(n.phone_number))
+          .map(n => ({ phoneNumber: n.phone_number, registered: !!(regs[n.phone_number] && regs[n.phone_number].registered) }));
+      } catch (e) {}
+      return json(res, 200, {
+        configured: true,
+        activeCallerId: cs.callerId || null,
+        callingDeployed: !!(cs.voiceDomain || cs.parallelLegUrl || cs.autoSingleUrl),
+        numbers
+      });
+    }
     // hides/unhides an owned number from this app entirely — for numbers used by another
-    // system (e.g. a texting-only number on the same Twilio account) that shouldn't show up
     // as a caller ID option, an auto-state-switch target, or get swept into "enable inbound"'s
     // all-owned-numbers default. Excluding a number also clears any voice webhook this app
     // previously pointed at it and scrubs it from this app's other local per-number settings —

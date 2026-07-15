@@ -610,6 +610,11 @@
     <div class="hint">Changes save automatically and apply the next time you build a queue or place a call.</div>
 
     <div class="setSection">
+      <h4>Setup Health</h4>
+      <div id="healthCheck" class="setNote">Checking…</div>
+    </div>
+
+    <div class="setSection">
       <h4>Calling</h4>
       <div class="setRow" id="callerIdStatus"></div>
       <div class="setRow">
@@ -865,9 +870,29 @@ function numberHealth() {
   return nums;
 }
 
+// Translates the handful of raw Twilio error strings people actually hit into plain English
+// with a next step — a coworker seeing "401 Primary compliance profile is not approved" has no
+// idea what that means or what to do about it. Falls through unchanged for anything unrecognized.
+function friendlyTwilioError(msg) {
+  const m = String(msg || '');
+  const low = m.toLowerCase();
+  if (low.includes('compliance profile') || low.includes('trust hub')) {
+    return 'Twilio needs identity verification before this account can buy numbers. Go to console.twilio.com → Trust Hub and complete the compliance profile — or pick "Use my own phone number" instead to skip this for now. (Raw error: ' + m + ')';
+  }
+  if (low.includes('unverified') && (low.includes('trial') || low.includes('verify'))) {
+    return 'This is a Twilio trial account — it can only call numbers you\'ve manually verified. Add ~$20 credit in the Twilio console to upgrade, or verify this specific number first. (Raw error: ' + m + ')';
+  }
+  if (low.includes('not a valid phone number') || low.includes('not a valid, sms')) {
+    return 'That doesn\'t look like a valid phone number — check for typos or a missing area code. (Raw error: ' + m + ')';
+  }
+  if (low.includes('authenticate')) {
+    return 'Twilio rejected these credentials — double-check the Account SID and Auth Token from Setup Calling. (Raw error: ' + m + ')';
+  }
+  return m;
+}
 async function api(path, opts) {
   const r = await fetch(path, opts);
-  if (!r.ok) throw new Error((await r.json()).error || r.status);
+  if (!r.ok) throw new Error(friendlyTwilioError((await r.json()).error || r.status));
   return r.json();
 }
 function patch(l, fields) {
@@ -1484,10 +1509,39 @@ window.buyNumber = async (num, region) => {
     loadNumbers();
   } catch (e) { alert('Purchase failed: ' + e.message); }
 };
+// One-glance setup diagnostics — surfaces the exact things that have actually tripped up
+// real installs (trial account restrictions, no active caller ID, backend never deployed,
+// unregistered numbers) instead of each showing up as a separate cryptic error later.
+async function loadHealthCheck() {
+  const el = $('healthCheck');
+  if (!device) { el.innerHTML = 'Run Setup Calling first to see setup status here.'; return; }
+  try {
+    const h = await api('/api/twilio/health');
+    if (!h.configured) {
+      el.innerHTML = '<div class="setStatus" style="color:var(--red)">✗ Twilio not configured — run Setup Calling.</div>';
+      return;
+    }
+    const rows = [];
+    rows.push(h.activeCallerId
+      ? ['✓', 'var(--green)', `Active caller ID: ${esc(fmtPhone(h.activeCallerId))}`]
+      : ['✗', 'var(--red)', 'No active caller ID set — pick one below under Phone Numbers.']);
+    rows.push(h.callingDeployed
+      ? ['✓', 'var(--green)', 'Calling backend deployed to Twilio.']
+      : ['⚠', 'var(--amber)', 'Calling backend not deployed yet — happens automatically on your first call.']);
+    const regCount = h.numbers.filter(n => n.registered).length;
+    if (h.numbers.length) {
+      rows.push(regCount === h.numbers.length
+        ? ['✓', 'var(--green)', `All ${h.numbers.length} number${h.numbers.length === 1 ? '' : 's'} registered.`]
+        : ['⚠', 'var(--amber)', `${h.numbers.length - regCount} of ${h.numbers.length} number${h.numbers.length === 1 ? '' : 's'} not registered — see Spam Registration below.`]);
+    }
+    el.innerHTML = rows.map(([mark, color, text]) => `<div style="color:${color};margin-bottom:4px">${mark} ${esc(text)}</div>`).join('');
+  } catch (e) { el.innerHTML = 'Couldn\'t check — ' + esc(e.message); }
+}
 function openSettings() {
   const s = settings();
   renderCallerIdStatus();
   loadNumbers();
+  loadHealthCheck();
   $('ringTimeout').value = s.callSettings.ringTimeoutSec;
   const rmp = s.callSettings.ringMyPhone || { enabled: false, number: '' };
   $('rmpEnabled').checked = !!rmp.enabled;
