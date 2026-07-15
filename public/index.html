@@ -1369,7 +1369,7 @@ async function loadNumbers() {
     $('numberList').innerHTML = (shown.length ? shown.map(n => `
       <div class="setRow">
         <label style="flex:1"><input type="radio" name="activeNum" value="${esc(n.phoneNumber)}" ${n.active ? 'checked' : ''} onchange="setActiveNumber('${esc(n.phoneNumber)}')"> ${esc(fmtPhone(n.phoneNumber))}${n.friendlyName ? ' — ' + esc(n.friendlyName) : ''}</label>
-        ${n.active ? '<span class="chip green">active</span>' : `<a onclick="toggleNumberExcluded('${esc(n.phoneNumber)}', true)" style="color:var(--dim);cursor:pointer">· hide from CRM</a>`}
+        ${n.active ? '<span class="chip green">active</span>' : `<a onclick="toggleNumberExcluded('${esc(n.phoneNumber)}', true)" style="color:var(--dim);cursor:pointer">· hide from CRM</a> <a onclick="releaseNumber('${esc(n.phoneNumber)}')" style="color:var(--red);cursor:pointer;margin-left:6px">· remove</a>`}
       </div>`).join('') : '<span class="setNote">No numbers yet — search below to buy one.</span>')
       + (hidden.length ? `<div class="setNote" style="margin-top:8px">Hidden from this app (still active in Twilio): ${hidden.map(n => `${esc(fmtPhone(n.phoneNumber))} <a onclick="toggleNumberExcluded('${esc(n.phoneNumber)}', false)" style="cursor:pointer;text-decoration:underline">unhide</a>`).join(' · ')}</div>` : '');
     renderStateSwitch(shown);
@@ -1380,6 +1380,13 @@ window.toggleNumberExcluded = async (num, excluded) => {
   if (excluded && !confirm(`Hide ${fmtPhone(num)} from this app? It stays active in Twilio (e.g. for texting elsewhere) — this just removes it as a caller ID / inbound-routing option here.`)) return;
   await api('/api/twilio/exclude', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num, excluded }) });
   loadNumbers();
+};
+window.releaseNumber = async num => {
+  if (!confirm(`Permanently release ${fmtPhone(num)} from your Twilio account?\n\nThis gives the number up for good — it stops the ~$1.15/mo charge, but you can't get it back, and any spam registration/reputation built up on it is lost. If you just don't want it used here but still need it elsewhere, use "hide from CRM" instead.`)) return;
+  try {
+    await api('/api/twilio/numbers', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phoneNumber: num }) });
+    loadNumbers();
+  } catch (e) { alert('Could not remove: ' + e.message); }
 };
 function regMap() { return settings().callSettings.numberRegistrations || {}; }
 function renderRegistrations(list) {

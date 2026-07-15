@@ -658,8 +658,30 @@ const server = http.createServer(async (req, res) => {
       const excluded = new Set((readConfig().callSettings || {}).excludedNumbers || []);
       return json(res, 200, (j.incoming_phone_numbers || []).map(n => ({
         phoneNumber: n.phone_number, friendlyName: n.friendly_name, active: n.phone_number === active,
-        excluded: excluded.has(n.phone_number)
+        excluded: excluded.has(n.phone_number), sid: n.sid
       })));
+    }
+    // permanently releases a number from the Twilio account (stops the ~$1.15/mo charge) — NOT
+    // the same as excluding, which just hides an owned number from this app. This actually gives
+    // the number up; it can't be recovered once released.
+    if (p === '/api/twilio/numbers' && req.method === 'DELETE') {
+      const { phoneNumber } = await body(req);
+      if (!phoneNumber) return json(res, 400, { error: 'phoneNumber required' });
+      if (phoneNumber === activeCallerId()) return json(res, 400, { error: 'This is your active caller ID — switch to a different number first.' });
+      const owned = await twilioApi(`/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(phoneNumber)}`);
+      const n = (owned.incoming_phone_numbers || [])[0];
+      if (!n) return json(res, 404, { error: 'Number not found on this Twilio account.' });
+      await twilioApi(`/IncomingPhoneNumbers/${n.sid}.json`, 'DELETE');
+      // scrub every local trace of it
+      const cfg = readConfig();
+      const cs = cfg.callSettings || {};
+      if (Array.isArray(cs.excludedNumbers)) cs.excludedNumbers = cs.excludedNumbers.filter(x => x !== phoneNumber);
+      if (Array.isArray(cs.inboundNumbers)) cs.inboundNumbers = cs.inboundNumbers.filter(x => x !== phoneNumber);
+      if (cs.numberRegistrations) delete cs.numberRegistrations[phoneNumber];
+      if (cs.autoStateSwitch && Array.isArray(cs.autoStateSwitch.entries)) cs.autoStateSwitch.entries = cs.autoStateSwitch.entries.filter(e => e.number !== phoneNumber);
+      cfg.callSettings = cs;
+      writeConfig(cfg);
+      return json(res, 200, { ok: true });
     }
     // hides/unhides an owned number from this app entirely — for numbers used by another
     // system (e.g. a texting-only number on the same Twilio account) that shouldn't show up
