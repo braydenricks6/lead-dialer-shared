@@ -474,6 +474,10 @@ const server = http.createServer(async (req, res) => {
       const vf = path.join(__dirname, 'VERSION');
       return json(res, 200, { version: fs.existsSync(vf) ? fs.readFileSync(vf, 'utf8').trim() : '' });
     }
+    if (p === '/api/changelog' && req.method === 'GET') {
+      const cf = path.join(__dirname, 'CHANGELOG.md');
+      return json(res, 200, { text: fs.existsSync(cf) ? fs.readFileSync(cf, 'utf8') : '' });
+    }
     if (p === '/api/config' && req.method === 'GET') {
       const cf = path.join(__dirname, 'config.json');
       return json(res, 200, fs.existsSync(cf) ? JSON.parse(fs.readFileSync(cf, 'utf8')) : {});

@@ -703,8 +703,12 @@
       </div>
     </div>
 
+    <div id="whatsNewPanel" style="display:none; max-height:220px; overflow-y:auto; margin-top:6px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:12.5px; line-height:1.5"></div>
     <div class="row" style="margin-top:16px; justify-content:flex-end; align-items:center">
-      <div class="setNote" id="appVersion" style="margin:0 auto 0 0; opacity:.55"></div>
+      <div style="margin:0 auto 0 0; display:flex; align-items:center; gap:10px">
+        <span class="setNote" id="appVersion" style="opacity:.55"></span>
+        <a href="#" id="whatsNewLink" class="setNote" style="opacity:.55">What's New</a>
+      </div>
       <button id="closeModal">Done</button>
     </div>
   </div>
@@ -1586,12 +1590,32 @@ async function loadAppVersion() {
   }
   el.textContent = appVersion ? ('v' + appVersion) : '';
 }
+let changelogText = null;
+async function toggleWhatsNew(e) {
+  e.preventDefault();
+  const panel = $('whatsNewPanel');
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  if (changelogText === null) {
+    panel.innerHTML = '<span class="setNote">Loading…</span>';
+    try { changelogText = (await api('/api/changelog')).text || ''; } catch (err) { changelogText = ''; }
+  }
+  if (!changelogText) { panel.innerHTML = '<span class="setNote">Couldn\'t load release notes.</span>'; return; }
+  const entries = changelogText.split(/^## /m).filter(Boolean);
+  panel.innerHTML = entries.map(block => {
+    const [head, ...rest] = block.split('\n');
+    const bullets = rest.filter(l => l.trim().startsWith('-')).map(l => `<li>${esc(l.trim().slice(1).trim())}</li>`).join('');
+    return `<div style="margin-bottom:10px"><b>${esc(head.trim())}</b><ul style="margin:4px 0 0 18px;padding:0">${bullets}</ul></div>`;
+  }).join('');
+}
+$('whatsNewLink').addEventListener('click', toggleWhatsNew);
 function openSettings() {
   const s = settings();
   renderCallerIdStatus();
   loadNumbers();
   loadHealthCheck();
   loadAppVersion();
+  $('whatsNewPanel').style.display = 'none';
   $('ringTimeout').value = s.callSettings.ringTimeoutSec;
   const rmp = s.callSettings.ringMyPhone || { enabled: false, number: '' };
   $('rmpEnabled').checked = !!rmp.enabled;
