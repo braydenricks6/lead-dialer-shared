@@ -1,3 +1,6 @@
+## v13 — Skip retrying after a machine pickup
+- New setting in Auto-Dial Defaults: "Move on immediately after a machine pickup — don't retry the same lead." Off by default. Applies to both hands-free single-line dialing and ring-my-phone sessions — a voicemail box won't become a person on the next attempt, so this saves the wasted retries when attempts-per-lead is set above 1.
+
 ## v12 — Fixed cross-day log collapsing
 - A retried lead's collapsed log line (e.g. "No Answer ×3") only merges same-day repeats now. Previously, a lead that got the same outcome again after resting a few days on the retry cadence had that new dial silently merged into the old entry, with the whole entry's date bumped to today — quietly attributing older dials to today's stats.
 

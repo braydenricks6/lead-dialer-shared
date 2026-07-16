@@ -679,7 +679,8 @@
       <div class="setRow"><label>Auto-advance delay <input type="number" id="advanceDelay" min="0" max="15"> sec after each disposition</label></div>
       <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="handsFree"> Hands-free dialing — auto-mark voicemail &amp; no-answer, only stop for live people</label></div>
       <div class="setRow" id="attemptsRow"><label>Dial each lead <input type="number" id="attemptsPerLead" min="1" max="5" style="width:56px"> time(s) before moving on</label></div>
-      <div class="setNote">Dials one lead at a time with answering-machine detection. A machine pickup is auto-marked <b>Straight to Voicemail</b>, a full ring with no pickup is auto-marked <b>No Answer</b>, and it keeps going on its own — it only rings your browser (with a beep) when a <b>real person</b> answers. Walk away and come back when you hear the beep.</div>
+      <div class="setRow" id="skipVoicemailRow"><label><input type="checkbox" id="skipVoicemailRetry"> Move on immediately after a machine pickup — don't retry the same lead</label></div>
+      <div class="setNote">Dials one lead at a time with answering-machine detection. A machine pickup is auto-marked <b>Straight to Voicemail</b>, a full ring with no pickup is auto-marked <b>No Answer</b>, and it keeps going on its own — it only rings your browser (with a beep) when a <b>real person</b> answers. Walk away and come back when you hear the beep. If retrying more than once, a machine pickup on the first try still counts toward the total unless you check the box above — a voicemail box won't become a person on the next attempt.</div>
     </div>
 
     <div class="setSection">
@@ -720,7 +721,7 @@
 let leads = [], sel = null, device = null, activeCall = null, callerId = null;
 let config = { dispositions: null };
 const DEFAULT_SETTINGS = {
-  autoDial: { defaultWho: 'notReached', skipCalledToday: true, advanceDelaySec: 3, handsFree: true, attemptsPerLead: 1,
+  autoDial: { defaultWho: 'notReached', skipCalledToday: true, advanceDelaySec: 3, handsFree: true, attemptsPerLead: 1, skipVoicemailRetry: false,
     // retry cadence: gaps[n-1] = days a lead rests after its nth dial (last value repeats).
     // maxAttempts 0 = never archive. Due callbacks always bypass the cadence.
     cadence: { enabled: true, gaps: [1, 3, 7, 14], maxAttempts: 0 } },
@@ -1632,6 +1633,8 @@ function openSettings() {
   $('handsFree').checked = !!s.autoDial.handsFree;
   $('attemptsPerLead').value = s.autoDial.attemptsPerLead || 1;
   $('attemptsRow').style.display = (s.autoDial.handsFree || rmp.enabled) ? '' : 'none';
+  $('skipVoicemailRetry').checked = !!s.autoDial.skipVoicemailRetry;
+  $('skipVoicemailRow').style.display = (s.autoDial.handsFree || rmp.enabled) ? '' : 'none';
   populateHourSelects();
   $('hoursEnabled').checked = s.callingHours.enabled;
   $('hoursStart').value = s.callingHours.startHour;
@@ -1681,7 +1684,9 @@ function saveRingMyPhone(patch) {
 // "attempts per lead" applies to both hands-free single-line AND ring-my-phone session
 // dialing, so it should show whenever either one is on, not just hands-free alone.
 function updateAttemptsRowVisibility() {
-  $('attemptsRow').style.display = ($('handsFree').checked || $('rmpEnabled').checked) ? '' : 'none';
+  const show = ($('handsFree').checked || $('rmpEnabled').checked) ? '' : 'none';
+  $('attemptsRow').style.display = show;
+  $('skipVoicemailRow').style.display = show;
 }
 $('rmpEnabled').addEventListener('change', e => {
   saveRingMyPhone({ enabled: e.target.checked });
@@ -1712,6 +1717,7 @@ $('handsFree').addEventListener('change', e => {
   updateAttemptsRowVisibility();
 });
 $('attemptsPerLead').addEventListener('change', e => saveSetting('autoDial', 'attemptsPerLead', Math.max(1, Math.min(5, Number(e.target.value) || 1))));
+$('skipVoicemailRetry').addEventListener('change', e => saveSetting('autoDial', 'skipVoicemailRetry', e.target.checked));
 $('hoursEnabled').addEventListener('change', e => { saveSetting('callingHours', 'enabled', e.target.checked); updateQueueInfo(); });
 $('hoursStart').addEventListener('change', e => { saveSetting('callingHours', 'startHour', Number(e.target.value)); updateQueueInfo(); });
 $('hoursEnd').addEventListener('change', e => { saveSetting('callingHours', 'endHour', Number(e.target.value)); updateQueueInfo(); });
@@ -1948,6 +1954,7 @@ async function dialSingleAuto() {
     renderList(); renderDetail();
     autoStatusMsg(`<span class="who">${esc(lead.name)}</span> → <b>${tag}</b> ✓ auto-marked`);
     if (result.outcome === 'failed' || result.outcome === 'canceled') break; // bad/unreachable — don't keep retrying
+    if (result.outcome === 'voicemail' && settings().autoDial.skipVoicemailRetry) break; // a machine won't become a person next try
     if (attempt < maxTries) { await sleep(1000); }
   }
   if (!auto.active) return;
@@ -2144,6 +2151,7 @@ async function dialSessionLead(session) {
     auto.lastResult = `${esc(lead.name)} → ${tag}`;
     renderList(); renderDetail();
     if (leg && leg.outcome === 'failed') break; // bad/unreachable number — don't keep retrying
+    if (leg && leg.outcome === 'voicemail' && settings().autoDial.skipVoicemailRetry) break; // a machine won't become a person next try
     if (attempt < maxTries) await sleep(1000);
   }
   if (!auto.active) return;
