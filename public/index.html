@@ -236,6 +236,32 @@
   #cbModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   #cbModal .dTop h3 { font-size: 15px; }
 
+  /* calendar (callbacks + appointments) */
+  #calModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 55; }
+  #calModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: 640px; max-width: calc(100vw - 40px); max-height: 88vh; overflow-y: auto; }
+  .calNav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 10px 0 14px; }
+  .calNav button { padding: 6px 12px; }
+  .calNav .calMonthLabel { font-weight: 600; min-width: 150px; text-align: center; }
+  .calGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .calDow { text-align: center; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; padding-bottom: 4px; }
+  .calCell { min-height: 62px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+  .calCell:hover { border-color: var(--accent); }
+  .calCell.otherMonth { opacity: .35; }
+  .calCell.today { border-color: var(--accent); border-width: 2px; }
+  .calCell.selected { background: var(--chip-amber-bg); }
+  .calCell .calDate { font-size: 12px; font-weight: 600; }
+  .calDots { display: flex; gap: 3px; flex-wrap: wrap; }
+  .calDot { width: 7px; height: 7px; border-radius: 50%; }
+  .calDot.cb { background: var(--amber); }
+  .calDot.appt { background: var(--accent); }
+  .calDayList { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .calDayItem { display: flex; align-items: center; gap: 8px; padding: 7px 0; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .calDayItem:last-child { border-bottom: none; }
+  .calDayItem .t { font-size: 12px; color: var(--dim); min-width: 68px; }
+  .calDayItem .nm { flex: 1; font-weight: 600; font-size: 13px; }
+  .calLegend { display: flex; gap: 16px; font-size: 12px; color: var(--dim); margin-top: 10px; }
+  .calLegend span { display: flex; align-items: center; gap: 5px; }
+
   /* import type (fresh vs aged) */
   #importTypeModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 58; }
   #importTypeModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 330px; }
@@ -369,6 +395,7 @@
   <button id="dialerBtn" title="Manual dialer — type any number">📞 Dialer</button>
   <button id="dashBtn" title="Calling stats dashboard">📊 Stats</button>
   <button id="clientsBtn" title="Clients & policies — track actual sales">🏆 Clients</button>
+  <button id="calBtn" title="Callbacks & appointments calendar">📆 Calendar</button>
   <button id="themeToggle" title="Toggle light/dark mode">🌙 Dark</button>
   <button id="settingsBtn" title="App settings">⚙ Settings</button>
   <button id="importBtn">Import</button>
@@ -435,7 +462,7 @@
 </div>
 <div id="cbModal">
   <div class="box">
-    <div class="dTop"><h3>📅 Schedule callback</h3><button class="dClose" id="cbCloseBtn">✕</button></div>
+    <div class="dTop"><h3 id="cbModalTitle">📅 Schedule callback</h3><button class="dClose" id="cbCloseBtn">✕</button></div>
     <div id="cbWho"></div>
     <div class="cbPresets">
       <button data-preset="1h">In 1 hour</button>
@@ -603,6 +630,26 @@
     <div class="row" style="margin-top:6px; justify-content:flex-end"><button id="closeDash">Done</button></div>
   </div>
   <div id="dashTip"></div>
+</div>
+
+<div id="calModal">
+  <div class="box">
+    <div class="dTop"><h3>📆 Calendar</h3><button class="dClose" id="calCloseBtn">✕</button></div>
+    <div class="hint">Callbacks and appointments you've scheduled from a lead's detail pane. Click a day to see what's on it.</div>
+    <div class="calNav">
+      <button id="calPrev">‹</button>
+      <span class="calMonthLabel" id="calMonthLabel"></span>
+      <button id="calNext">›</button>
+      <button id="calToday" title="Jump to today">Today</button>
+    </div>
+    <div class="calGrid" id="calGrid"></div>
+    <div class="calLegend">
+      <span><span class="calDot cb"></span> Callback</span>
+      <span><span class="calDot appt"></span> Appointment</span>
+    </div>
+    <div class="calDayList" id="calDayList"></div>
+    <div class="row" style="margin-top:16px; justify-content:flex-end"><button id="calDoneBtn">Done</button></div>
+  </div>
 </div>
 
 <div id="modal">
@@ -1195,6 +1242,7 @@ function renderDetail() {
         </div>
         ${l.blocked ? `<div class="statusPill" style="background:rgba(217,92,92,.15);color:#f0a0a0;margin-left:8px">⛔ Blocked (do not call) <a onclick="toggleBlocked()" title="Unblock">· unblock</a></div>` : ''}
         ${l.callbackAt ? `<div class="statusPill" style="background:var(--chip-amber-bg);color:var(--chip-amber-text);margin-top:6px">📅 Callback ${fmtCbTime(l.callbackAt)}${l.callbackNote ? ` — ${esc(l.callbackNote)}` : ''} <a onclick="clearCallback()" title="Remove this scheduled callback">· clear</a></div>` : ''}
+        ${l.appointmentAt ? `<div class="statusPill" style="background:var(--chip-amber-bg);color:var(--chip-amber-text);margin-top:6px">📆 Appointment ${fmtCbTime(l.appointmentAt)}${l.appointmentNote ? ` — ${esc(l.appointmentNote)}` : ''} <a onclick="clearAppointment()" title="Remove this scheduled appointment">· clear</a></div>` : ''}
       </div>
       </div>
       <div class="navBtns">
@@ -1305,13 +1353,15 @@ async function removeLog(i) {
 window.removeLog = removeLog;
 
 // ---------- dispositions ----------
-// A "Callback" disposition opens the scheduling popover first; everything else applies directly.
+// A "Callback" or "Scheduled Appointment" disposition opens the scheduling popover first;
+// everything else applies directly.
 async function dispo(tag) {
   if (!sel) return;
-  if (/callback/i.test(tag)) return openCbModal(tag);
+  if (/callback/i.test(tag)) return openCbModal(tag, 'callback');
+  if (/appointment/i.test(tag) && !/missed/i.test(tag)) return openCbModal(tag, 'appointment');
   applyDispo(tag);
 }
-async function applyDispo(tag, cb) {
+async function applyDispo(tag, sched) {
   if (!sel) return;
   const l = sel;
   l.lastDispo = tag;
@@ -1319,17 +1369,24 @@ async function applyDispo(tag, cb) {
   l.log = l.log || [];
   l.log.push(`${stamp()} ${tag}`);
   const upd = { lastDispo: l.lastDispo, lastCalledAt: l.lastCalledAt, log: l.log };
-  if (cb) { // scheduling a new callback
-    l.callbackAt = upd.callbackAt = cb.at;
-    l.callbackNote = upd.callbackNote = cb.note || '';
-  } else if (l.callbackAt) {
-    // clear an existing callback if you actually spoke to them (promise consumed),
-    // or if it was already due (this call WAS the callback). A future promise
-    // survives an unrelated early no-answer.
+  if (sched) { // scheduling a new callback or appointment
+    const atKey = sched.kind === 'appointment' ? 'appointmentAt' : 'callbackAt';
+    const noteKey = sched.kind === 'appointment' ? 'appointmentNote' : 'callbackNote';
+    l[atKey] = upd[atKey] = sched.at;
+    l[noteKey] = upd[noteKey] = sched.note || '';
+  } else {
+    // Clear an existing callback/appointment if you actually spoke to them (promise consumed),
+    // or if it was already due (this call WAS the promise). A future promise survives an
+    // unrelated early no-answer. Same rule for both — they're independent, a lead can have one
+    // of each at once (e.g. a callback to confirm details ahead of a later appointment).
     const d = dispos().find(x => x.name === tag);
-    if ((d && d.contact) || new Date(l.callbackAt) <= new Date()) {
+    if (l.callbackAt && ((d && d.contact) || new Date(l.callbackAt) <= new Date())) {
       l.callbackAt = upd.callbackAt = null;
       l.callbackNote = upd.callbackNote = null;
+    }
+    if (l.appointmentAt && ((d && d.contact) || new Date(l.appointmentAt) <= new Date())) {
+      l.appointmentAt = upd.appointmentAt = null;
+      l.appointmentNote = upd.appointmentNote = null;
     }
   }
   await patch(l, upd);
@@ -1347,7 +1404,7 @@ window.dispo = dispo;
 // the agent's own local time with zero extra work — only the read/write of the picker itself
 // needs the lead-timezone math. Falls back to treating the input as the agent's own local time
 // for any state with no known offset (same as before this feature existed).
-let cbPendingTag = null;
+let cbPendingTag = null, cbPendingKind = 'callback';
 const toLocalInput = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 // Format an absolute instant as the wall-clock string it reads in a given UTC-offset zone.
 function toOffsetInput(d, off) {
@@ -1371,10 +1428,13 @@ function cbPresetDate(k, off) {
   const leadNow = new Date(Date.now() + off * 3600000);
   return new Date(Date.UTC(leadNow.getUTCFullYear(), leadNow.getUTCMonth(), leadNow.getUTCDate() + 1, hour, 0) - off * 3600000);
 }
-function openCbModal(tag) {
+function openCbModal(tag, kind) {
   cbPendingTag = tag;
+  cbPendingKind = kind || 'callback';
+  const isAppt = cbPendingKind === 'appointment';
   const off = sel ? tzOffset(sel.state) : null;
-  $('cbWho').textContent = sel ? `${sel.name} — when should they hear from you?` : '';
+  $('cbModalTitle').textContent = isAppt ? '📆 Schedule appointment' : '📅 Schedule callback';
+  $('cbWho').textContent = sel ? `${sel.name} — ${isAppt ? "when's the appointment?" : 'when should they hear from you?'}` : '';
   $('cbTzNote').textContent = off != null
     ? `⏰ Times here are in their time zone (${STATE_NAME[normState(sel.state)] || sel.state}) — you'll see it converted to your own local time everywhere else in the app.`
     : `⏰ Couldn't determine their time zone from "${sel ? sel.state || '(no state)' : ''}" — this time will be treated as your own local time.`;
@@ -1399,9 +1459,10 @@ $('cbSave').onclick = async () => {
   const at = off != null ? fromOffsetInput(v, off) : new Date(v);
   if (at <= new Date()) { $('cbStatus').textContent = 'That time is in the past'; return; }
   const tag = cbPendingTag;
+  const kind = cbPendingKind;
   const note = $('cbNote').value.trim();
   closeCbModal();
-  await applyDispo(tag, { at: at.toISOString(), note });
+  await applyDispo(tag, { at: at.toISOString(), note, kind });
 };
 $('cbCloseBtn').onclick = closeCbModal;
 $('cbModal').addEventListener('click', e => { if (e.target.id === 'cbModal') closeCbModal(); });
@@ -1412,30 +1473,112 @@ async function clearCallback() {
   renderList(); renderDetail();
 }
 window.clearCallback = clearCallback;
+async function clearAppointment() {
+  if (!sel || !sel.appointmentAt) return;
+  sel.appointmentAt = null; sel.appointmentNote = null;
+  await patch(sel, { appointmentAt: null, appointmentNote: null });
+  renderList(); renderDetail();
+}
+window.clearAppointment = clearAppointment;
 
 const fmtCbTime = ts => {
   const d = new Date(ts), now = new Date();
   const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
   return d.toDateString() === now.toDateString() ? t : `${d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })} ${t}`;
 };
-// the strip shows overdue promises + everything due before end of today
+// the strip shows overdue promises + everything due before end of today — callbacks AND
+// appointments together, sorted by time, each tagged with its own icon.
 function renderDueStrip() {
   const el = $('dueStrip'); if (!el) return;
   const now = new Date();
   const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
-  const due = leads.filter(l => l.callbackAt && new Date(l.callbackAt) <= endOfDay)
-    .sort((a, b) => new Date(a.callbackAt) - new Date(b.callbackAt));
-  if (!due.length) { el.style.display = 'none'; return; }
+  const items = [];
+  for (const l of leads) {
+    if (l.callbackAt && new Date(l.callbackAt) <= endOfDay) items.push({ l, at: l.callbackAt, note: l.callbackNote, icon: '📅' });
+    if (l.appointmentAt && new Date(l.appointmentAt) <= endOfDay) items.push({ l, at: l.appointmentAt, note: l.appointmentNote, icon: '📆' });
+  }
+  items.sort((a, b) => new Date(a.at) - new Date(b.at));
+  if (!items.length) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  el.innerHTML = `<div class="dueHead" title="Times below are already converted to your own local time">📅 Callbacks due today (${due.length})</div>` + due.map(l => {
-    const late = new Date(l.callbackAt) < now;
-    return `<div class="dueItem ${late ? 'late' : ''}" onclick="select(${l.id})">
-      <span>${esc(l.name)}${l.callbackNote ? ` <span style="color:var(--dim)">— ${esc(l.callbackNote)}</span>` : ''}</span>
-      <span class="t">${late ? 'overdue · ' : ''}${fmtCbTime(l.callbackAt)}</span>
+  el.innerHTML = `<div class="dueHead" title="Times below are already converted to your own local time">📅 Due today (${items.length})</div>` + items.map(it => {
+    const late = new Date(it.at) < now;
+    return `<div class="dueItem ${late ? 'late' : ''}" onclick="select(${it.l.id})">
+      <span>${it.icon} ${esc(it.l.name)}${it.note ? ` <span style="color:var(--dim)">— ${esc(it.note)}</span>` : ''}</span>
+      <span class="t">${late ? 'overdue · ' : ''}${fmtCbTime(it.at)}</span>
     </div>`;
   }).join('');
 }
 setInterval(renderDueStrip, 60000); // roll "upcoming" into "overdue" as time passes
+
+// ---------- calendar (callbacks + appointments) ----------
+let calViewDate = new Date(); // first-of-month anchor for whatever month is currently shown
+let calSelectedDay = null; // 'YYYY-MM-DD' of the day currently expanded in the list below the grid
+function calItemsByDay() {
+  const byDay = {};
+  const key = d => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; };
+  for (const l of leads) {
+    if (l.callbackAt) (byDay[key(l.callbackAt)] ||= []).push({ l, at: l.callbackAt, note: l.callbackNote, kind: 'cb' });
+    if (l.appointmentAt) (byDay[key(l.appointmentAt)] ||= []).push({ l, at: l.appointmentAt, note: l.appointmentNote, kind: 'appt' });
+  }
+  for (const k in byDay) byDay[k].sort((a, b) => new Date(a.at) - new Date(b.at));
+  return byDay;
+}
+function renderCalendar() {
+  const y = calViewDate.getFullYear(), m = calViewDate.getMonth();
+  $('calMonthLabel').textContent = calViewDate.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  const byDay = calItemsByDay();
+  const today = new Date(); const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const firstOfMonth = new Date(y, m, 1);
+  const startDow = firstOfMonth.getDay();
+  const gridStart = new Date(y, m, 1 - startDow);
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = dows.map(d => `<div class="calDow">${d}</div>`).join('');
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const items = byDay[key] || [];
+    const classes = ['calCell'];
+    if (d.getMonth() !== m) classes.push('otherMonth');
+    if (key === todayKey) classes.push('today');
+    if (key === calSelectedDay) classes.push('selected');
+    const dots = items.length ? `<div class="calDots">${items.map(it => `<span class="calDot ${it.kind === 'appt' ? 'appt' : 'cb'}"></span>`).join('')}</div>` : '';
+    html += `<div class="${classes.join(' ')}" onclick="calSelectDay('${key}')"><span class="calDate">${d.getDate()}</span>${dots}</div>`;
+  }
+  $('calGrid').innerHTML = html;
+  renderCalDayList();
+}
+function renderCalDayList() {
+  const el = $('calDayList');
+  if (!calSelectedDay) { el.innerHTML = '<div class="dashEmpty">Click a day to see what\'s on it.</div>'; return; }
+  const byDay = calItemsByDay();
+  const items = byDay[calSelectedDay] || [];
+  const label = new Date(calSelectedDay + 'T00:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  if (!items.length) { el.innerHTML = `<div class="hint">${esc(label)} — nothing scheduled.</div>`; return; }
+  el.innerHTML = `<div class="hint" style="margin-bottom:4px">${esc(label)}</div>` + items.map(it => `
+    <div class="calDayItem" onclick="select(${it.l.id});$('calModal').style.display='none'">
+      <span class="t">${fmtCbTime(it.at)}</span>
+      <span class="nm">${it.kind === 'appt' ? '📆' : '📅'} ${esc(it.l.name)}</span>
+      ${it.note ? `<span class="hint" style="margin:0">${esc(it.note)}</span>` : ''}
+    </div>`).join('');
+}
+window.calSelectDay = k => { calSelectedDay = k; renderCalendar(); };
+$('calBtn').onclick = () => {
+  calViewDate = new Date(); calViewDate.setDate(1);
+  const today = new Date();
+  calSelectedDay = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  renderCalendar();
+  $('calModal').style.display = 'flex';
+};
+$('calPrev').onclick = () => { calViewDate.setMonth(calViewDate.getMonth() - 1); renderCalendar(); };
+$('calNext').onclick = () => { calViewDate.setMonth(calViewDate.getMonth() + 1); renderCalendar(); };
+$('calToday').onclick = () => {
+  calViewDate = new Date(); calViewDate.setDate(1);
+  const today = new Date();
+  calSelectedDay = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  renderCalendar();
+};
+$('calCloseBtn').onclick = $('calDoneBtn').onclick = () => { $('calModal').style.display = 'none'; };
+$('calModal').addEventListener('click', e => { if (e.target.id === 'calModal') $('calModal').style.display = 'none'; });
 
 // Single-key hotkeys (1-9/n/c/m) were removed July 2026 — Cmd+C to copy a phone number or
 // address (plain text, not an input, so the old input-focus guard never caught it) fired the
@@ -1828,7 +1971,7 @@ function withinCallingHours(l) {
 function buildQueue(opts) {
   const who = document.querySelector('input[name=who]:checked').value;
   const skipToday = $('skipToday').checked;
-  let hoursExcluded = 0, resting = 0, exhausted = 0, callbacksSkipped = 0;
+  let hoursExcluded = 0, resting = 0, exhausted = 0, callbacksSkipped = 0, appointmentsSkipped = 0;
   const now = new Date();
   const cad = settings().autoDial.cadence || {};
   // cadence: after the nth dial a lead rests gaps[n-1] days (last gap repeats) before
@@ -1848,6 +1991,9 @@ function buildQueue(opts) {
     // to jump the queue and dial itself once due, which fired on leads set as "call me later"
     // notes-to-self, not real promises. Call these yourself from the "Callbacks due today" strip.
     if (l.callbackAt) { callbacksSkipped++; return false; }
+    // Same reasoning as callbacks — a scheduled appointment shouldn't get auto-dialed and
+    // dispositioned out from under it before it's even happened.
+    if (l.appointmentAt) { appointmentsSkipped++; return false; }
     const st = statusOf(l);
     if (who === 'notReached' && st === 'contacted') return false;
     if (who === 'untouched' && st !== 'untouched') return false;
@@ -1869,13 +2015,14 @@ function buildQueue(opts) {
   };
   const scores = new Map(q.map(l => [l.id, hourScore(l)]));
   q.sort((a, b) => scores.get(b.id) - scores.get(a.id)); // stable sort → equal scores keep their order
-  if (opts && opts.withMeta) return { queue: q, hoursExcluded, resting, exhausted, callbacksSkipped };
+  if (opts && opts.withMeta) return { queue: q, hoursExcluded, resting, exhausted, callbacksSkipped, appointmentsSkipped };
   return q;
 }
 function updateQueueInfo() {
-  const { queue: q, hoursExcluded, resting, exhausted, callbacksSkipped } = buildQueue({ withMeta: true });
+  const { queue: q, hoursExcluded, resting, exhausted, callbacksSkipped, appointmentsSkipped } = buildQueue({ withMeta: true });
   const extras = [];
   if (callbacksSkipped) extras.push(`${callbacksSkipped} have a scheduled callback — dial from the strip above`);
+  if (appointmentsSkipped) extras.push(`${appointmentsSkipped} have a scheduled appointment — see the Calendar`);
   if (resting) extras.push(`${resting} resting between tries`);
   if (exhausted) extras.push(`${exhausted} archived at max tries`);
   if (hoursExcluded) extras.push(`${hoursExcluded} outside calling hours`);

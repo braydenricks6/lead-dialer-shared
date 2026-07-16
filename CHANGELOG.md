@@ -1,3 +1,6 @@
+## v16 — Calendar for callbacks & appointments
+- New 📆 Calendar button opens a month-grid view of every scheduled callback and appointment, with a dot for each on the days they fall on — click a day to see the list, click an item to jump straight to that lead. "Scheduled Appointment" now opens the same time-zone-aware scheduling popover Callback already used (added in v15), storing a separate appointmentAt/appointmentNote pair. Leads with a pending appointment are now excluded from the auto-dial queue, same as pending callbacks — you won't get auto-dialed and dispositioned out of a meeting you already booked. The "Due today" strip now shows both callbacks and appointments together.
+
 ## v15 — Callbacks scheduled in the lead's own time zone
 - Scheduling a callback now reads and writes the time picker in the LEAD's local time zone (based on their state), not yours — so if they say "call me at 3," you type 3, no mental math. A disclaimer in the scheduling popover names their time zone; everywhere else (the due-today strip, the detail pill) already shows the converted time in your own local time, since the underlying stored instant hasn't changed. Falls back to your own local time for any state with no known time zone, same as before.
 
