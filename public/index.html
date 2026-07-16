@@ -3198,6 +3198,25 @@ function unrecognizedHeaders(headerKeys) {
     return !KNOWN_FIELDS[k] && !BASE_ALIAS[lk] && !KNOWN_FIELDS[lk];
   });
 }
+// Some lead vendors cram a whole row of metadata into one "notes" column as repeated
+// "[Key: Value] [Key: Value] ..." tags (order/lead IDs, mortgage details, call duration, etc.)
+// instead of separate columns. When a notes value is made up almost entirely of that pattern,
+// split it into real custom fields (which already render individually in the lead detail's
+// "More details" section) instead of dumping it all into one unreadable text blob. A genuine
+// free-text note that happens to contain a bracket somewhere is left alone — the 70% coverage
+// check means only text that's essentially ALL tags gets this treatment.
+function parseBracketFields(text) {
+  if (!text) return null;
+  const re = /\[([^\[\]:]+):\s*([^\[\]]*)\]/g;
+  const fields = {};
+  let m;
+  while ((m = re.exec(text))) fields[m[1].trim()] = m[2].trim();
+  if (!Object.keys(fields).length) return null;
+  const nonSpace = text.replace(/\s+/g, '').length;
+  const covered = Object.entries(fields).reduce((s, [k, v]) => s + k.length + v.length, 0);
+  if (covered < nonSpace * 0.7) return null;
+  return fields;
+}
 function mapRow(r, extraAlias) {
   const alias = extraAlias ? Object.assign({}, BASE_ALIAS, extraAlias) : BASE_ALIAS;
   const out = { custom: r.custom || {} };
@@ -3212,6 +3231,11 @@ function mapRow(r, extraAlias) {
     if (target === '_custom') { out.custom[k] = v; continue; } // explicitly kept as a custom field
     if (target === '_fn') fn = v;
     else if (target === '_ln') ln = v;
+    else if (target === 'notes') {
+      const bracketFields = parseBracketFields(v);
+      if (bracketFields) Object.assign(out.custom, bracketFields);
+      else out.notes = v;
+    }
     else if (target) out[target] = v;
     else out.custom[k] = v;
   }

@@ -1,3 +1,6 @@
+## v18 — Auto-split bracket-tagged notes into real fields
+- Some lead vendors cram everything into one notes column as repeated "[Key: Value] [Key: Value]" tags instead of separate columns. When a notes value is almost entirely that pattern, it now gets split into individual custom fields (which already show up in the lead detail's "More details" section) instead of one unreadable text blob. A genuine free-text note that happens to contain a bracket is left alone.
+
 ## v17 — Column-matching step for CSV imports
 - Importing a generic CSV now shows a "Match your columns" step (like Ringy's import editor) before anything gets saved — every detected column, a sample value, and a dropdown to confirm or fix what it maps to (Name, Phone, Address components as custom fields, Notes, Disposition/Status, ignore it entirely, etc.), pre-filled with our best guess. Fixes a real trap: a status-like column named something other than exactly "Status" (e.g. a vendor's own tier/tag column) could silently get treated as a real call disposition and wrongly mark fresh leads as already contacted — now you see and confirm every mapping instead of trusting an invisible guess. Skipped for Ringy-raw exports and re-imports of this app's own JSON export, which don't need it.
 
