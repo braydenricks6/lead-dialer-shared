@@ -3200,11 +3200,14 @@ function unrecognizedHeaders(headerKeys) {
 }
 // Some lead vendors cram a whole row of metadata into one "notes" column as repeated
 // "[Key: Value] [Key: Value] ..." tags (order/lead IDs, mortgage details, call duration, etc.)
-// instead of separate columns. When a notes value is made up almost entirely of that pattern,
-// split it into real custom fields (which already render individually in the lead detail's
-// "More details" section) instead of dumping it all into one unreadable text blob. A genuine
-// free-text note that happens to contain a bracket somewhere is left alone — the 70% coverage
-// check means only text that's essentially ALL tags gets this treatment.
+// instead of separate columns. When a notes value is made up ENTIRELY of that pattern, split
+// it into real custom fields (which already render individually in the lead detail's "More
+// details" section) instead of dumping it all into one unreadable text blob. Deliberately
+// strict — requires ZERO leftover text once every tag is stripped out, not just "mostly"
+// bracket-shaped. A real note like "[Household Income: $30k-$50k] 7/10 2x NA" (a vendor tag
+// PLUS a genuine agent-typed follow-up) must be left completely untouched, since a softer
+// percentage-coverage version of this check was caught doing exactly that — silently deleting
+// a real note because it was short relative to the one bracket tag next to it.
 function parseBracketFields(text) {
   if (!text) return null;
   const re = /\[([^\[\]:]+):\s*([^\[\]]*)\]/g;
@@ -3212,9 +3215,8 @@ function parseBracketFields(text) {
   let m;
   while ((m = re.exec(text))) fields[m[1].trim()] = m[2].trim();
   if (!Object.keys(fields).length) return null;
-  const nonSpace = text.replace(/\s+/g, '').length;
-  const covered = Object.entries(fields).reduce((s, [k, v]) => s + k.length + v.length, 0);
-  if (covered < nonSpace * 0.7) return null;
+  const residual = text.replace(/\[([^\[\]:]+):\s*([^\[\]]*)\]/g, '').trim();
+  if (residual) return null; // real free text alongside the tags -- leave the whole note alone
   return fields;
 }
 function mapRow(r, extraAlias) {

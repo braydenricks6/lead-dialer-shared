@@ -1,3 +1,6 @@
+## v19 — Fixed a data-loss bug from v18
+- v18's bracket-notes splitter used a "70% of the text is bracket tags" threshold, which was too loose — a real note like "[Household Income: $30k-$50k] 7/10 2x NA" (a vendor tag plus a genuine agent-typed follow-up) would have had the "7/10 2x NA" part silently deleted, since the short residual barely tipped the percentage. Caught before it did any damage in the wild by checking a broader sample of leads, not just the ones a specific import touched. Now requires ZERO leftover text after stripping the tags — if there's any real content next to them, the whole note is left completely alone.
+
 ## v18 — Auto-split bracket-tagged notes into real fields
 - Some lead vendors cram everything into one notes column as repeated "[Key: Value] [Key: Value]" tags instead of separate columns. When a notes value is almost entirely that pattern, it now gets split into individual custom fields (which already show up in the lead detail's "More details" section) instead of one unreadable text blob. A genuine free-text note that happens to contain a bracket is left alone.
 
