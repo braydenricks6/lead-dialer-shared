@@ -443,6 +443,7 @@
       <button data-preset="tmrw-pm">Tomorrow 2pm</button>
     </div>
     <div class="alField"><label>Or pick a time</label><input type="datetime-local" id="cbWhen"></div>
+    <div class="hint" id="cbTzNote" style="margin:-6px 0 12px"></div>
     <div class="alField"><label>Note <span class="alOpt">optional</span></label><input id="cbNote" placeholder="e.g. wants to talk after payday"></div>
     <div class="alActions">
       <button class="primary" id="cbSave" style="flex:1">Save callback</button>
@@ -1339,18 +1340,44 @@ async function applyDispo(tag, cb) {
 window.dispo = dispo;
 
 // ---------- callback scheduling ----------
+// The time picker here is filled in and read back in the LEAD's own local time (derived from
+// their state), not the agent's — because "call me back at 3" was said in their time zone, not
+// yours. Storage is still a plain absolute instant (callbackAt), so every other place that
+// displays it (the due-today strip, the detail pill) already shows it correctly converted to
+// the agent's own local time with zero extra work — only the read/write of the picker itself
+// needs the lead-timezone math. Falls back to treating the input as the agent's own local time
+// for any state with no known offset (same as before this feature existed).
 let cbPendingTag = null;
 const toLocalInput = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
-function cbPresetDate(k) {
-  const d = new Date();
-  if (k === '1h') { d.setHours(d.getHours() + 1, 0, 0, 0); return d; }
-  d.setDate(d.getDate() + 1);
-  d.setHours(k === 'tmrw-am' ? 9 : 14, 0, 0, 0);
-  return d;
+// Format an absolute instant as the wall-clock string it reads in a given UTC-offset zone.
+function toOffsetInput(d, off) {
+  const shifted = new Date(d.getTime() + off * 3600000);
+  const p = n => String(n).padStart(2, '0');
+  return `${shifted.getUTCFullYear()}-${p(shifted.getUTCMonth()+1)}-${p(shifted.getUTCDate())}T${p(shifted.getUTCHours())}:${p(shifted.getUTCMinutes())}`;
+}
+// Parse a "Y-M-DTH:M" wall-clock string as if it were in a given UTC-offset zone, returning the
+// absolute instant.
+function fromOffsetInput(v, off) {
+  const [datePart, timePart] = v.split('T');
+  const [Y, Mo, D] = datePart.split('-').map(Number);
+  const [H, Mi] = (timePart || '0:0').split(':').map(Number);
+  return new Date(Date.UTC(Y, Mo - 1, D, H, Mi) - off * 3600000);
+}
+function cbPresetDate(k, off) {
+  if (k === '1h') { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0); return d; }
+  const hour = k === 'tmrw-am' ? 9 : 14;
+  if (off == null) { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(hour, 0, 0, 0); return d; }
+  // "tomorrow" on the LEAD's own calendar day, not the agent's (matters near midnight)
+  const leadNow = new Date(Date.now() + off * 3600000);
+  return new Date(Date.UTC(leadNow.getUTCFullYear(), leadNow.getUTCMonth(), leadNow.getUTCDate() + 1, hour, 0) - off * 3600000);
 }
 function openCbModal(tag) {
   cbPendingTag = tag;
+  const off = sel ? tzOffset(sel.state) : null;
   $('cbWho').textContent = sel ? `${sel.name} — when should they hear from you?` : '';
+  $('cbTzNote').textContent = off != null
+    ? `⏰ Times here are in their time zone (${STATE_NAME[normState(sel.state)] || sel.state}) — you'll see it converted to your own local time everywhere else in the app.`
+    : `⏰ Couldn't determine their time zone from "${sel ? sel.state || '(no state)' : ''}" — this time will be treated as your own local time.`;
   $('cbWhen').value = '';
   $('cbNote').value = '';
   $('cbStatus').textContent = '';
@@ -1361,12 +1388,15 @@ function closeCbModal() { $('cbModal').style.display = 'none'; cbPendingTag = nu
 document.querySelectorAll('.cbPresets button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.cbPresets button').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
-  $('cbWhen').value = toLocalInput(cbPresetDate(b.dataset.preset));
+  const off = sel ? tzOffset(sel.state) : null;
+  const d = cbPresetDate(b.dataset.preset, off);
+  $('cbWhen').value = off != null ? toOffsetInput(d, off) : toLocalInput(d);
 });
 $('cbSave').onclick = async () => {
   const v = $('cbWhen').value;
   if (!v) { $('cbStatus').textContent = 'Pick a time (or tap a preset)'; return; }
-  const at = new Date(v);
+  const off = sel ? tzOffset(sel.state) : null;
+  const at = off != null ? fromOffsetInput(v, off) : new Date(v);
   if (at <= new Date()) { $('cbStatus').textContent = 'That time is in the past'; return; }
   const tag = cbPendingTag;
   const note = $('cbNote').value.trim();
@@ -1397,7 +1427,7 @@ function renderDueStrip() {
     .sort((a, b) => new Date(a.callbackAt) - new Date(b.callbackAt));
   if (!due.length) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  el.innerHTML = `<div class="dueHead">📅 Callbacks due today (${due.length})</div>` + due.map(l => {
+  el.innerHTML = `<div class="dueHead" title="Times below are already converted to your own local time">📅 Callbacks due today (${due.length})</div>` + due.map(l => {
     const late = new Date(l.callbackAt) < now;
     return `<div class="dueItem ${late ? 'late' : ''}" onclick="select(${l.id})">
       <span>${esc(l.name)}${l.callbackNote ? ` <span style="color:var(--dim)">— ${esc(l.callbackNote)}</span>` : ''}</span>

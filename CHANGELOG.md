@@ -1,3 +1,6 @@
+## v15 — Callbacks scheduled in the lead's own time zone
+- Scheduling a callback now reads and writes the time picker in the LEAD's local time zone (based on their state), not yours — so if they say "call me at 3," you type 3, no mental math. A disclaimer in the scheduling popover names their time zone; everywhere else (the due-today strip, the detail pill) already shows the converted time in your own local time, since the underlying stored instant hasn't changed. Falls back to your own local time for any state with no known time zone, same as before.
+
 ## v14 — Configurable machine-pickup retry limit
 - The "skip after a machine pickup" setting from v13 is now a number instead of on/off: "Move on after N machine pickup(s), even if attempts remain" (1–5, off by default). Lets you dial a lead 3 times overall but stop after 2 machine pickups — useful since some phones (iPhone Do Not Disturb) auto-forward the first unknown call to voicemail but let a second one ring through, so it's often worth one retry, just not the full attempt count.
 
