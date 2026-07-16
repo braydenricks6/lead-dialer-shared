@@ -1,3 +1,6 @@
+## v14 — Configurable machine-pickup retry limit
+- The "skip after a machine pickup" setting from v13 is now a number instead of on/off: "Move on after N machine pickup(s), even if attempts remain" (1–5, off by default). Lets you dial a lead 3 times overall but stop after 2 machine pickups — useful since some phones (iPhone Do Not Disturb) auto-forward the first unknown call to voicemail but let a second one ring through, so it's often worth one retry, just not the full attempt count.
+
 ## v13 — Skip retrying after a machine pickup
 - New setting in Auto-Dial Defaults: "Move on immediately after a machine pickup — don't retry the same lead." Off by default. Applies to both hands-free single-line dialing and ring-my-phone sessions — a voicemail box won't become a person on the next attempt, so this saves the wasted retries when attempts-per-lead is set above 1.
 
