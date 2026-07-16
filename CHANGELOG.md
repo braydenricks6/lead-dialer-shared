@@ -1,3 +1,6 @@
+## v12 — Fixed cross-day log collapsing
+- A retried lead's collapsed log line (e.g. "No Answer ×3") only merges same-day repeats now. Previously, a lead that got the same outcome again after resting a few days on the retry cadence had that new dial silently merged into the old entry, with the whole entry's date bumped to today — quietly attributing older dials to today's stats.
+
 ## v11 — Fixed Stats dashboard undercounting retried calls
 - Dispositions that get retried and collapsed into one log line (e.g. "No Answer ×3") were being tallied as a separate bucket from plain "No Answer," and counted as 1 call instead of 3. Fixed for the Calls tile, Reach rate, the 14-day chart, and the disposition breakdown — all now merge and count correctly.
 

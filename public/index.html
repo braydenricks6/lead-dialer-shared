@@ -2020,13 +2020,18 @@ async function logOutcome(lead, tag) {
   lead.log = lead.log || [];
   // collapse consecutive identical outcomes into one "Tag ×N" entry instead of stacking
   // duplicate lines (e.g. 3 retry no-answers → "No Answer ×3"). dialCount still counts each ring.
+  // Only collapses same-day repeats — a cadence-gapped retry days later (matching outcome or
+  // not) always starts a fresh line, so a merged entry's date always reflects when ALL of its
+  // dials actually happened, not just the most recent one.
+  const today = stamp();
   const last = lead.log[lead.log.length - 1];
+  const lastDate = last ? (last.match(/^(\d+\/\d+)/) || [])[1] : null;
   const lastBase = last ? last.replace(/^\d+\/\d+\s*/, '').replace(/\s*×\d+$/, '') : null;
-  if (lastBase === tag) {
+  if (lastBase === tag && lastDate === today) {
     const m = last.match(/×(\d+)$/);
-    lead.log[lead.log.length - 1] = `${stamp()} ${tag} ×${m ? parseInt(m[1], 10) + 1 : 2}`;
+    lead.log[lead.log.length - 1] = `${today} ${tag} ×${m ? parseInt(m[1], 10) + 1 : 2}`;
   } else {
-    lead.log.push(`${stamp()} ${tag}`);
+    lead.log.push(`${today} ${tag}`);
   }
   await patch(lead, { lastDispo: lead.lastDispo, lastCalledAt: lead.lastCalledAt, log: lead.log });
 }
