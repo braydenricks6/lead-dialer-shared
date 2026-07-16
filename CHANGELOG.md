@@ -1,3 +1,6 @@
+## v20 — Call recordings
+- Every dial mode (manual, keypad, hands-free single-line, parallel/ring-my-phone, inbound) now records the call via Twilio. A "🎙 Call Recordings" section in the lead detail pane lists them with an inline player — click to expand and load. Twilio's recording fee is about $0.0025/minute, on top of normal per-minute call cost. No recording-disclosure announcement is played at the start of calls — a deliberate choice, not an oversight; several states legally require all-party consent to record, so check what applies before relying on this.
+
 ## v19 — Fixed a data-loss bug from v18
 - v18's bracket-notes splitter used a "70% of the text is bracket tags" threshold, which was too loose — a real note like "[Household Income: $30k-$50k] 7/10 2x NA" (a vendor tag plus a genuine agent-typed follow-up) would have had the "7/10 2x NA" part silently deleted, since the short residual barely tipped the percentage. Caught before it did any damage in the wild by checking a broader sample of leads, not just the ones a specific import touched. Now requires ZERO leftover text after stripping the tags — if there's any real content next to them, the whole note is left completely alone.
 

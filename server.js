@@ -242,12 +242,14 @@ const OUTBOUND_CODE = `exports.handler = function(context, event, callback) {
     //   is no local tone reaching them, so real silence means real silence. Let Twilio's default
     //   hold music play instead by omitting waitUrl.
     const dial = twiml.dial();
-    const confOpts = { startConferenceOnEnter: true, endConferenceOnExit: true, beep: false };
+    // record: 'record-from-start' on the Conference verb records the whole mixed conversation
+    // (agent + lead), fetched later via /Conferences/{sid}/Recordings, not /Calls/{sid}/Recordings.
+    const confOpts = { startConferenceOnEnter: true, endConferenceOnExit: true, beep: false, record: 'record-from-start' };
     if (event.Hold !== '1') confOpts.waitUrl = '';
     dial.conference(confOpts, event.Room);
   } else {
     const timeout = parseInt(event.Timeout, 10) || 20;
-    const dial = twiml.dial({ callerId: event.CallerId, answerOnBridge: true, timeout });
+    const dial = twiml.dial({ callerId: event.CallerId, answerOnBridge: true, timeout, record: 'record-from-answer-dual' });
     dial.number(event.To);
   }
   callback(null, twiml);
@@ -261,7 +263,7 @@ const PARALLEL_CODE = `exports.handler = function(context, event, callback) {
   } else {
     // human (or undetermined — never risk hanging up on a live person)
     const dial = twiml.dial();
-    dial.conference({ startConferenceOnEnter: false, endConferenceOnExit: false, beep: false }, event.Room);
+    dial.conference({ startConferenceOnEnter: false, endConferenceOnExit: false, beep: false, record: 'record-from-start' }, event.Room);
   }
   callback(null, twiml);
 };`;
@@ -269,7 +271,7 @@ const PARALLEL_CODE = `exports.handler = function(context, event, callback) {
 // caller so the CRM can match them to a lead. If nobody answers in 25s, take a voicemail.
 const INBOUND_CODE = `exports.handler = function(context, event, callback) {
   const twiml = new Twilio.twiml.VoiceResponse();
-  const dial = twiml.dial({ callerId: event.From, timeout: 25, answerOnBridge: true });
+  const dial = twiml.dial({ callerId: event.From, timeout: 25, answerOnBridge: true, record: 'record-from-answer-dual' });
   dial.client(${JSON.stringify(CLIENT_IDENTITY)});
   callback(null, twiml);
 };`;
@@ -283,7 +285,7 @@ const AUTO_SINGLE_CODE = `exports.handler = function(context, event, callback) {
   if (answeredBy.indexOf('machine') === 0 || answeredBy === 'fax') {
     twiml.hangup();
   } else {
-    twiml.dial({ callerId: event.To, timeout: 25 }).client(${JSON.stringify(CLIENT_IDENTITY)});
+    twiml.dial({ callerId: event.To, timeout: 25, record: 'record-from-answer-dual' }).client(${JSON.stringify(CLIENT_IDENTITY)});
   }
   callback(null, twiml);
 };`;
@@ -504,13 +506,59 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/call-log' && req.method === 'POST') {
       // manual/browser dials log themselves here (auto + parallel dials are logged server-side)
-      const { leadId, state, number, mode, outcome } = await body(req);
-      logCall({ leadId: leadId || null, state: state || null, number: number || activeCallerId(), mode: mode || 'manual', outcome: outcome || 'manual' });
+      const { leadId, state, number, mode, outcome, sid } = await body(req);
+      logCall({ leadId: leadId || null, state: state || null, number: number || activeCallerId(), mode: mode || 'manual', outcome: outcome || 'manual', sid: sid || null });
       return json(res, 200, { ok: true });
     }
     if (p === '/api/call-stats' && req.method === 'GET') {
       // raw call events; frontend aggregates (number health, best-time-to-call)
       return json(res, 200, calls.slice(-20000));
+    }
+    if (p === '/api/twilio/recordings' && req.method === 'GET') {
+      // Recordings are fetched live from Twilio (not cached locally) — a call's recording isn't
+      // ready for a few seconds to ~a minute after the call ends, so caching would just show
+      // stale/missing results for anything recent. Two different lookups depending on how the
+      // call was placed: a plain dial (manual/keypad/hands-free) records the CALL itself
+      // (/Calls/{sid}/Recordings); a parallel/ring-my-phone dial joins a Conference, which
+      // records the whole mixed conversation (/Conferences/{sid}/Recordings), looked up by the
+      // room's friendly name since that's all logCall() has on hand for that mode.
+      const leadId = Number(url.searchParams.get('leadId'));
+      if (!leadId) return json(res, 400, { error: 'leadId required' });
+      const rows = calls.filter(c => c.leadId === leadId && (c.sid || c.room));
+      const out = [];
+      const seenRooms = new Set();
+      for (const c of rows) {
+        try {
+          if (c.sid) {
+            const r = await twilioApi(`/Calls/${c.sid}/Recordings.json`);
+            for (const rec of r.recordings || []) out.push({ sid: rec.sid, ts: c.ts, duration: rec.duration, source: 'call' });
+          } else if (c.room && !seenRooms.has(c.room)) {
+            seenRooms.add(c.room);
+            const conf = await twilioApi(`/Conferences.json?FriendlyName=${encodeURIComponent(c.room)}`);
+            for (const cf of conf.conferences || []) {
+              const r = await twilioApi(`/Conferences/${cf.sid}/Recordings.json`);
+              for (const rec of r.recordings || []) out.push({ sid: rec.sid, ts: c.ts, duration: rec.duration, source: 'conference' });
+            }
+          }
+        } catch (e) { /* recording not ready yet, or call/conference too old to still exist — skip */ }
+      }
+      out.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+      return json(res, 200, out);
+    }
+    const recAudioMatch = p.match(/^\/api\/twilio\/recording-audio\/(RE[a-zA-Z0-9]+)$/);
+    if (recAudioMatch && req.method === 'GET') {
+      // Proxies the actual audio bytes so the browser never needs Twilio credentials — a plain
+      // <audio src="/api/twilio/recording-audio/RE..."> just works, same-origin, no auth headers.
+      try {
+        const auth = Buffer.from(`${env.TWILIO_API_KEY}:${env.TWILIO_API_SECRET}`).toString('base64');
+        const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Recordings/${recAudioMatch[1]}.mp3`, {
+          headers: { Authorization: 'Basic ' + auth }
+        });
+        if (!r.ok) return json(res, r.status, { error: 'recording not found' });
+        const buf = Buffer.from(await r.arrayBuffer());
+        res.writeHead(200, Object.assign({ 'Content-Type': 'audio/mpeg', 'Content-Length': buf.length }, CORS));
+        return res.end(buf);
+      } catch (e) { return json(res, 500, { error: e.message }); }
     }
 
     if (p === '/api/twilio/parallel-setup' && req.method === 'POST') {
@@ -559,7 +607,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       if (!outcome) { try { await twilioApi(`/Calls/${sid}.json`, 'POST', { Status: 'canceled' }); } catch (e) {} outcome = 'no-answer'; }
-      logCall({ leadId, state: leadState || null, number: callerId || activeCallerId(), mode: 'auto', outcome });
+      logCall({ leadId, state: leadState || null, number: callerId || activeCallerId(), mode: 'auto', outcome, sid });
       return json(res, 200, { outcome, sid });
     }
     if (p === '/api/twilio/inbound-status' && req.method === 'GET') {
@@ -622,7 +670,9 @@ const server = http.createServer(async (req, res) => {
       }
       for (const leg of legs) {
         const orig = callsReq.find(c => c.leadId === leg.leadId) || {};
-        logCall({ leadId: leg.leadId, state: orig.leadState || null, number: orig.callerId || activeCallerId(), mode: 'parallel', outcome: leg.outcome || 'no-answer' });
+        // room, not sid — this leg joined a Conference, whose recording is fetched via
+        // /Conferences/{sid}/Recordings using the room's friendly name, not /Calls/{sid}/Recordings
+        logCall({ leadId: leg.leadId, state: orig.leadState || null, number: orig.callerId || activeCallerId(), mode: 'parallel', outcome: leg.outcome || 'no-answer', room });
       }
       return json(res, 200, { winner: winner ? winner.leadId : null, winnerSid: winner ? winner.sid : null, room, legs: legs.map(l => ({ leadId: l.leadId, outcome: l.outcome || 'no-answer' })) });
     }

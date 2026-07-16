@@ -161,6 +161,14 @@
   details.moreFields summary { cursor: pointer; color: var(--dim); font-size: 12.5px; padding: 4px 0; user-select: none; }
   details.moreFields summary:hover { color: var(--text); }
   details.moreFields .fields { margin: 8px 0 0; }
+  details.recSection { margin: 14px 0 0; }
+  details.recSection summary { cursor: pointer; color: var(--dim); font-size: 12.5px; padding: 4px 0; user-select: none; }
+  details.recSection summary:hover { color: var(--text); }
+  details.recSection #recordingsBody { margin: 8px 0 0; }
+  .recRow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .recRow:last-child { border-bottom: none; }
+  .recRow .recTime { font-size: 12px; color: var(--dim); min-width: 130px; }
+  .recRow audio { flex: 1; height: 32px; }
   #workup { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin: 16px 0 0; overflow: hidden; }
   .wTabs { display: flex; border-bottom: 1px solid var(--line); }
   .wTabs button { background: none; border: none; border-radius: 0; padding: 10px 16px; color: var(--dim); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; border-bottom: 2px solid transparent; }
@@ -945,9 +953,9 @@ let callStats = [];
 async function refreshCallStats() {
   try { callStats = await api('/api/call-stats'); } catch (e) { callStats = []; }
 }
-function logCallEvent(lead, number, mode, outcome) {
+function logCallEvent(lead, number, mode, outcome, sid) {
   // fire-and-forget; also append locally so stats stay live without a refetch
-  const entry = { ts: new Date().toISOString(), leadId: lead ? lead.id : null, state: lead ? (normState(lead.state) || null) : null, number: number || callerId || null, mode, outcome };
+  const entry = { ts: new Date().toISOString(), leadId: lead ? lead.id : null, state: lead ? (normState(lead.state) || null) : null, number: number || callerId || null, mode, outcome, sid: sid || null };
   callStats.push(entry);
   api('/api/call-log', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(entry) }).catch(() => {});
 }
@@ -1238,6 +1246,22 @@ async function saveWorkupNow() {
 }
 window.wTab = async k => { await saveWorkupNow(); workupTab = k; renderDetail(); };
 window.wToggleReveal = async () => { await saveWorkupNow(); workupReveal = !workupReveal; renderDetail(); };
+// Fetched lazily (only once the <details> is opened) since it's a live Twilio lookup, not local
+// data — a recording isn't ready for a few seconds to ~a minute after the call ends, so there's
+// no point pre-fetching on every lead selection.
+async function loadRecordings(leadId) {
+  const body = document.getElementById('recordingsBody');
+  if (!body) return;
+  try {
+    const recs = await api('/api/twilio/recordings?leadId=' + leadId);
+    if (!recs.length) { body.innerHTML = 'No recordings found for this lead yet.'; return; }
+    body.innerHTML = recs.map(r => `
+      <div class="recRow">
+        <span class="recTime">${fmtCbTime(r.ts)}${r.duration ? ` · ${Math.round(r.duration / 60 * 10) / 10}m` : ''}</span>
+        <audio controls preload="none" src="/api/twilio/recording-audio/${esc(r.sid)}"></audio>
+      </div>`).join('');
+  } catch (e) { body.innerHTML = 'Couldn\'t load recordings — ' + esc(e.message); }
+}
 function renderDetail() {
   if (!sel) { $('detail').innerHTML = emptyStateHtml(); return; }
   const l = sel;
@@ -1285,11 +1309,22 @@ function renderDetail() {
     <textarea id="notes" placeholder="Notes…">${esc(l.notes || '')}</textarea>
     <div id="saveState"></div>
     ${extras}
+    ${device ? `<details class="recSection" id="recSection">
+      <summary>🎙 Call Recordings</summary>
+      <div id="recordingsBody" class="hint">Click to load…</div>
+    </details>` : ''}
     <div id="log">${(l.log || []).length ? '<h4>Call history</h4>' : ''}${(l.log || []).slice().reverse().map((e, ri) => {
       const i = (l.log || []).length - 1 - ri;
       return `<div class="entry"><button class="ghost" title="Remove this entry" onclick="removeLog(${i})">✕</button><span>${esc(e)}</span></div>`;
     }).join('')}</div>
   `;
+  const recEl = document.getElementById('recSection');
+  if (recEl) {
+    let loaded = false;
+    recEl.addEventListener('toggle', () => {
+      if (recEl.open && !loaded) { loaded = true; loadRecordings(l.id); }
+    });
+  }
   const wu = document.getElementById('workup');
   if (wu) wu.addEventListener('input', () => {
     clearTimeout(wSaveTimer);
@@ -2544,12 +2579,12 @@ async function manualDial() {
   const to = e164(raw);
   const ld = leads.find(l => e164(l.phone) === to);
   if (ld) bumpDial(ld); // if the dialed number is a known lead, count it
-  logCallEvent(ld || null, callerId, 'manual', 'manual'); // per-number dial volume
   dpOwnsCall = true;
   startDialTone();
   try {
     activeCall = await device.connect({ params: { To: to, CallerId: callerId, Timeout: String(settings().callSettings.ringTimeoutSec) } });
   } catch (err) { stopDialTone(); dpOwnsCall = false; $('dpStatus').textContent = 'Call failed: ' + err.message; return; }
+  logCallEvent(ld || null, callerId, 'manual', 'manual', activeCall.parameters && activeCall.parameters.CallSid); // per-number dial volume
   dpUIActive(true);
   $('dpStatus').textContent = 'calling ' + fmtPhone(to) + '…';
   activeCall.on('accept', () => { stopDialTone(); $('dpStatus').textContent = 'connected'; });
@@ -2681,7 +2716,6 @@ async function startCall() {
   if (activeCall) return;
   const fromNum = effectiveCallerId(sel);
   bumpDial(sel); // count every dial, not just dispositioned ones
-  logCallEvent(sel, fromNum, 'manual', 'manual'); // per-number dial volume (no AMD verdict on manual dials)
   startDialTone(); // instant audio feedback on click
   try {
     activeCall = await device.connect({ params: { To: e164(sel.phone), CallerId: fromNum, Timeout: String(settings().callSettings.ringTimeoutSec) } });
@@ -2690,6 +2724,7 @@ async function startCall() {
     setStatus('call failed: ' + e.message);
     return;
   }
+  logCallEvent(sel, fromNum, 'manual', 'manual', activeCall.parameters && activeCall.parameters.CallSid); // per-number dial volume (no AMD verdict on manual dials)
   const cb = $('callBtn'), hb = $('hangupBtn'), mb = $('muteBtn');
   if (cb) { cb.style.display = 'none'; hb.style.display = ''; mb.style.display = ''; }
   setStatus('calling ' + fmtPhone(sel.phone) + (fromNum && fromNum !== callerId ? ' from ' + fmtPhone(fromNum) : '') + '…');
