@@ -267,6 +267,16 @@
   #importTypeModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 330px; }
   #importTypeModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   #importTypeModal .dTop h3 { font-size: 15px; }
+
+  /* CSV column mapping (like Ringy's import field editor) */
+  #fieldMapModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 59; }
+  #fieldMapModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 560px; max-width: calc(100vw - 40px); max-height: 82vh; overflow-y: auto; }
+  #fieldMapModal .dTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  #fieldMapModal .dTop h3 { font-size: 15px; }
+  .fmRow { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .fmRow .fmHeader { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fmRow .fmSample { font-size: 11.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fmRow select { width: 100%; font-size: 12.5px; }
   #cbWho { font-size: 12.5px; color: var(--dim); margin-bottom: 12px; }
   .cbPresets { display: flex; gap: 8px; margin-bottom: 12px; }
   .cbPresets button { flex: 1; padding: 9px 4px; font-size: 12.5px; border-radius: 9px; }
@@ -485,6 +495,17 @@
     <div class="alActions" style="flex-direction:column;gap:8px">
       <button class="primary" id="itFresh" style="width:100%">🌱 Fresh leads</button>
       <button id="itAged" style="width:100%">🕰 Aged leads</button>
+    </div>
+  </div>
+</div>
+<div id="fieldMapModal">
+  <div class="box">
+    <div class="dTop"><h3>Match your columns</h3><button class="dClose" id="fmCloseBtn">✕</button></div>
+    <div class="hint" style="color:var(--dim);font-size:12.5px;margin-bottom:10px">We've guessed what each column is — check them over and fix anything that's wrong before importing.</div>
+    <div class="fmRow" style="font-weight:600;color:var(--dim);font-size:11px;text-transform:uppercase;border-bottom:2px solid var(--line)"><span>Column</span><span>Sample</span><span>Maps to</span></div>
+    <div id="fmRows"></div>
+    <div class="alActions" style="margin-top:14px">
+      <button class="primary" id="fmConfirm" style="flex:1">Import with this mapping</button>
     </div>
   </div>
 </div>
@@ -3109,8 +3130,20 @@ $('importFile').onchange = async e => {
   const leadType = await chooseLeadType();
   if (!leadType) { e.target.value = ''; return; } // cancelled
 
+  let extraAlias = null;
+  // Ringy-raw dumps have their own dedicated mapper (mapRingyRaw), and re-importing this app's
+  // own JSON export already uses canonical field names — neither needs a mapping step. A plain
+  // generic CSV gets a column-matching step first, like Ringy's own import does — pre-filled
+  // with our best guess so the user is confirming a mapping rather than starting from a blank
+  // slate, but always has the final say.
+  if (!isRingyRaw && !file.name.endsWith('.json') && rows.length) {
+    const headers = Object.keys(rows[0]);
+    extraAlias = await openFieldMapModal(headers, rows[0], null);
+    if (!extraAlias) { e.target.value = ''; return; } // cancelled at the mapping step
+  }
+
   const mapped = rows.map(r => {
-    const m = isRingyRaw ? mapRingyRaw(r) : mapRow(r);
+    const m = isRingyRaw ? mapRingyRaw(r) : mapRow(r, extraAlias);
     m.leadType = leadType;
     return m;
   });
@@ -3172,7 +3205,11 @@ function mapRow(r, extraAlias) {
   for (const [k, v] of Object.entries(r)) {
     if (v == null || v === '') continue;
     const lk = k.toLowerCase().trim();
-    const target = KNOWN_FIELDS[k] ? k : alias[lk] || (KNOWN_FIELDS[lk] ? lk : null);
+    // an explicit mapping (from the field-mapping modal) always wins over the automatic
+    // exact-name/alias guesses, so a user's manual override actually takes effect
+    const target = alias[lk] || (KNOWN_FIELDS[k] ? k : (KNOWN_FIELDS[lk] ? lk : null));
+    if (target === '_ignore') continue; // explicitly excluded in the field-mapping modal
+    if (target === '_custom') { out.custom[k] = v; continue; } // explicitly kept as a custom field
     if (target === '_fn') fn = v;
     else if (target === '_ln') ln = v;
     else if (target) out[target] = v;
@@ -3193,6 +3230,41 @@ function mapRow(r, extraAlias) {
     }
   }
   return out;
+}
+// ---------- CSV column mapping modal (Ringy-style "match your fields" step) ----------
+const FIELD_MAP_OPTIONS = [
+  ['name', 'Full Name'], ['_fn', 'First Name'], ['_ln', 'Last Name'], ['phone', 'Phone'],
+  ['email', 'Email'], ['state', 'State'], ['birthday', 'Birthday'], ['notes', 'Notes'],
+  ['vendor', 'Lead Vendor'], ['receivedOn', 'Date Received'], ['lastDispo', 'Disposition / Status'],
+  ['_custom', 'Custom field (just keep the data)'], ['_ignore', "Ignore — don't import this column"]
+];
+function guessTarget(header) {
+  const lk = header.toLowerCase().trim();
+  if (KNOWN_FIELDS[header]) return header;
+  if (BASE_ALIAS[lk]) return BASE_ALIAS[lk];
+  if (KNOWN_FIELDS[lk]) return lk;
+  return '_custom';
+}
+// Shows every detected column with a pre-filled guess (auto-detection, or the AI's suggestion
+// where available) so the user can review/correct the mapping before anything gets imported —
+// resolves to an extraAlias map for mapRow(), or null if the whole import was cancelled here.
+function openFieldMapModal(headers, sample, aiGuesses) {
+  return new Promise(resolve => {
+    $('fmRows').innerHTML = headers.map(h => {
+      const guess = (aiGuesses && aiGuesses[h.toLowerCase().trim()]) || guessTarget(h);
+      const sampleVal = String(sample[h] ?? '').slice(0, 60);
+      const opts = FIELD_MAP_OPTIONS.map(([v, lbl]) => `<option value="${v}" ${v === guess ? 'selected' : ''}>${esc(lbl)}</option>`).join('');
+      return `<div class="fmRow"><span class="fmHeader" title="${esc(h)}">${esc(h)}</span><span class="fmSample" title="${esc(sampleVal)}">${esc(sampleVal) || '—'}</span><select data-h="${esc(h)}">${opts}</select></div>`;
+    }).join('');
+    $('fieldMapModal').style.display = 'flex';
+    const done = v => { $('fieldMapModal').style.display = 'none'; resolve(v); };
+    $('fmConfirm').onclick = () => {
+      const extraAlias = {};
+      document.querySelectorAll('#fmRows select').forEach(sel => { extraAlias[sel.dataset.h.toLowerCase().trim()] = sel.value; });
+      done(extraAlias);
+    };
+    $('fmCloseBtn').onclick = () => done(null); // cancels the whole import
+  });
 }
 function parseCsv(text) {
   const rows = [];
