@@ -1,3 +1,6 @@
+## v21 — Recording on/off toggle + a global recordings view
+- Settings → Calling → "Record calls" now actually toggles recording on/off (previously always-on). Manual/keypad/hands-free/parallel/ring-my-phone calls pick up the change immediately, no redeploy needed; inbound calls refresh automatically the moment the toggle is flipped. New 🎙 Recordings header button lists recent recordings across every lead (1/7/14/30-day window), each linking back to that lead.
+
 ## v20 — Call recordings
 - Every dial mode (manual, keypad, hands-free single-line, parallel/ring-my-phone, inbound) now records the call via Twilio. A "🎙 Call Recordings" section in the lead detail pane lists them with an inline player — click to expand and load. Twilio's recording fee is about $0.0025/minute, on top of normal per-minute call cost. No recording-disclosure announcement is played at the start of calls — a deliberate choice, not an oversight; several states legally require all-party consent to record, so check what applies before relying on this.
 

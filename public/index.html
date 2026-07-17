@@ -247,6 +247,9 @@
   /* calendar (callbacks + appointments) */
   #calModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 55; }
   #calModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: 640px; max-width: calc(100vw - 40px); max-height: 88vh; overflow-y: auto; }
+  #allRecModal { position: fixed; inset: 0; background: var(--modal-overlay); display: none; align-items: center; justify-content: center; z-index: 55; }
+  #allRecModal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: 560px; max-width: calc(100vw - 40px); max-height: 82vh; overflow-y: auto; }
+  .recRow .recLead { flex: 0 0 150px; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .calNav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 10px 0 14px; }
   .calNav button { padding: 6px 12px; }
   .calNav .calMonthLabel { font-weight: 600; min-width: 150px; text-align: center; }
@@ -414,6 +417,7 @@
   <button id="dashBtn" title="Calling stats dashboard">📊 Stats</button>
   <button id="clientsBtn" title="Clients & policies — track actual sales">🏆 Clients</button>
   <button id="calBtn" title="Callbacks & appointments calendar">📆 Calendar</button>
+  <button id="allRecBtn" title="Recent call recordings across all leads">🎙 Recordings</button>
   <button id="themeToggle" title="Toggle light/dark mode">🌙 Dark</button>
   <button id="settingsBtn" title="App settings">⚙ Settings</button>
   <button id="importBtn">Import</button>
@@ -681,6 +685,24 @@
   </div>
 </div>
 
+<div id="allRecModal">
+  <div class="box">
+    <div class="dTop"><h3>🎙 Recordings</h3><button class="dClose" id="allRecCloseBtn">✕</button></div>
+    <div class="hint">Recent recordings across every lead. A ring-my-phone session with more than one lead shares one continuous recording, so it may show up more than once here.</div>
+    <div class="row" style="gap:8px; margin:10px 0">
+      <label style="font-size:12.5px">Last <select id="allRecDays">
+        <option value="1">1 day</option>
+        <option value="7" selected>7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select></label>
+      <button id="allRecRefresh">Refresh</button>
+    </div>
+    <div id="allRecBody" class="hint">Loading…</div>
+    <div class="row" style="margin-top:16px; justify-content:flex-end"><button id="allRecDoneBtn">Done</button></div>
+  </div>
+</div>
+
 <div id="modal">
   <div class="box" style="width:580px">
     <h3>Settings</h3>
@@ -703,6 +725,8 @@
         <input type="text" id="rmpNumber" placeholder="Your cell number, e.g. 385 555 1234" style="width:260px">
       </div>
       <div class="setNote">Calls ring your cell first — answer like a normal call and you're bridged to the lead. No browser mic/speaker needed. Leave this off to talk through the computer (headset), which most people prefer for volume dialing.</div>
+      <div class="setRow" style="margin-top:14px"><label><input type="checkbox" id="recordCallsToggle" checked> Record calls</label></div>
+      <div class="setNote">Applies to every dial mode — manual, keypad, hands-free, and ring my phone. No recording-disclosure announcement plays; several states legally require all-party consent to record, so confirm what applies to you. Recordings show up under "🎙 Call Recordings" on each lead, and in the 🎙 Recordings button up top.</div>
     </div>
 
     <div class="setSection">
@@ -804,7 +828,7 @@ const DEFAULT_SETTINGS = {
     // maxAttempts 0 = never archive. Due callbacks always bypass the cadence.
     cadence: { enabled: true, gaps: [1, 3, 7, 14], maxAttempts: 0 } },
   callingHours: { enabled: true, startHour: 8, endHour: 21 },
-  callSettings: { ringTimeoutSec: 20, autoStateSwitch: { enabled: false, entries: [] }, numberRegistrations: {}, ringMyPhone: { enabled: false, number: '' } }
+  callSettings: { ringTimeoutSec: 20, autoStateSwitch: { enabled: false, entries: [] }, numberRegistrations: {}, ringMyPhone: { enabled: false, number: '' }, recordCalls: true }
 };
 const FREE_CALLER_REGISTRY_URL = 'https://freecallerregistry.com';
 const HIYA_REPUTATION_URL = 'https://www.hiya.com/lp/caller-reputation';
@@ -1262,6 +1286,26 @@ async function loadRecordings(leadId) {
       </div>`).join('');
   } catch (e) { body.innerHTML = 'Couldn\'t load recordings — ' + esc(e.message); }
 }
+async function loadAllRecordings() {
+  const body = document.getElementById('allRecBody');
+  const days = $('allRecDays').value;
+  body.innerHTML = 'Loading…';
+  try {
+    const recs = await api('/api/twilio/recordings-all?days=' + days);
+    if (!recs.length) { body.innerHTML = 'No recordings found in this window.'; return; }
+    body.innerHTML = recs.map(r => `
+      <div class="recRow">
+        <span class="recTime">${fmtCbTime(r.ts)}${r.duration ? ` · ${Math.round(r.duration / 60 * 10) / 10}m` : ''}</span>
+        <span class="recLead" title="${esc(r.leadName || '')}">${r.leadId ? `<a onclick="select(${r.leadId});$('allRecModal').style.display='none'">${esc(r.leadName || ('#' + r.leadId))}</a>` : '—'}</span>
+        <audio controls preload="none" src="/api/twilio/recording-audio/${esc(r.sid)}"></audio>
+      </div>`).join('');
+  } catch (e) { body.innerHTML = 'Couldn\'t load recordings — ' + esc(e.message); }
+}
+$('allRecBtn').onclick = () => { $('allRecModal').style.display = 'flex'; loadAllRecordings(); };
+$('allRecRefresh').onclick = loadAllRecordings;
+$('allRecDays').addEventListener('change', loadAllRecordings);
+$('allRecCloseBtn').onclick = $('allRecDoneBtn').onclick = () => { $('allRecModal').style.display = 'none'; };
+$('allRecModal').addEventListener('click', e => { if (e.target.id === 'allRecModal') $('allRecModal').style.display = 'none'; });
 function renderDetail() {
   if (!sel) { $('detail').innerHTML = emptyStateHtml(); return; }
   const l = sel;
@@ -1852,6 +1896,7 @@ function openSettings() {
   $('rmpEnabled').checked = !!rmp.enabled;
   $('rmpNumber').value = rmp.number || '';
   $('rmpNumRow').style.display = rmp.enabled ? '' : 'none';
+  $('recordCallsToggle').checked = s.callSettings.recordCalls !== false;
   $('defDefaultWho').value = s.autoDial.defaultWho;
   $('defSkipToday').checked = s.autoDial.skipCalledToday;
   const cad = s.autoDial.cadence || { enabled: false, gaps: [1, 3, 7, 14], maxAttempts: 0 };
@@ -1929,6 +1974,12 @@ $('rmpEnabled').addEventListener('change', e => {
   updateAttemptsRowVisibility();
 });
 $('rmpNumber').addEventListener('change', e => saveRingMyPhone({ number: e.target.value.trim() }));
+$('recordCallsToggle').addEventListener('change', async e => {
+  const enabled = e.target.checked;
+  config.callSettings = Object.assign({}, settings().callSettings, { recordCalls: enabled }); // reflect immediately, don't wait on the round trip
+  try { await api('/api/twilio/set-recording', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ enabled }) }); }
+  catch (err) { e.target.checked = !enabled; config.callSettings = Object.assign({}, settings().callSettings, { recordCalls: !enabled }); alert('Could not save: ' + err.message); }
+});
 $('defDefaultWho').addEventListener('change', e => saveSetting('autoDial', 'defaultWho', e.target.value));
 $('defSkipToday').addEventListener('change', e => saveSetting('autoDial', 'skipCalledToday', e.target.checked));
 function saveCadence() {
@@ -2582,7 +2633,7 @@ async function manualDial() {
   dpOwnsCall = true;
   startDialTone();
   try {
-    activeCall = await device.connect({ params: { To: to, CallerId: callerId, Timeout: String(settings().callSettings.ringTimeoutSec) } });
+    activeCall = await device.connect({ params: { To: to, CallerId: callerId, Timeout: String(settings().callSettings.ringTimeoutSec), Record: settings().callSettings.recordCalls !== false ? '1' : '0' } });
   } catch (err) { stopDialTone(); dpOwnsCall = false; $('dpStatus').textContent = 'Call failed: ' + err.message; return; }
   logCallEvent(ld || null, callerId, 'manual', 'manual', activeCall.parameters && activeCall.parameters.CallSid); // per-number dial volume
   dpUIActive(true);
@@ -2718,7 +2769,7 @@ async function startCall() {
   bumpDial(sel); // count every dial, not just dispositioned ones
   startDialTone(); // instant audio feedback on click
   try {
-    activeCall = await device.connect({ params: { To: e164(sel.phone), CallerId: fromNum, Timeout: String(settings().callSettings.ringTimeoutSec) } });
+    activeCall = await device.connect({ params: { To: e164(sel.phone), CallerId: fromNum, Timeout: String(settings().callSettings.ringTimeoutSec), Record: settings().callSettings.recordCalls !== false ? '1' : '0' } });
   } catch (e) {
     stopDialTone();
     setStatus('call failed: ' + e.message);

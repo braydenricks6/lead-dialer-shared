@@ -114,6 +114,11 @@ function activeCallerId() {
   const cfg = readConfig();
   return (cfg.callSettings && cfg.callSettings.callerId) || env.TWILIO_CALLER_ID || null;
 }
+// Default true — recording shipped on by default; the Settings toggle is an explicit opt-out.
+function recordCallsEnabled() {
+  const cfg = readConfig();
+  return !cfg.callSettings || cfg.callSettings.recordCalls !== false;
+}
 function twilioToken() {
   const need = ['TWILIO_ACCOUNT_SID', 'TWILIO_API_KEY', 'TWILIO_API_SECRET', 'TWILIO_TWIML_APP_SID'];
   const missing = need.filter(k => !env[k]);
@@ -233,6 +238,7 @@ async function pollBuild(serviceSid, buildSid) {
 const CLIENT_IDENTITY = 'brayden'; // must match the identity in twilioToken()
 const OUTBOUND_CODE = `exports.handler = function(context, event, callback) {
   const twiml = new Twilio.twiml.VoiceResponse();
+  const rec = event.Record === '1';
   if (event.Mode === 'parallel' && event.Room) {
     // agent's own leg: join the conference and own its lifecycle (hang up = end the conference).
     // Two different callers land here and need different audio while waiting alone:
@@ -244,12 +250,15 @@ const OUTBOUND_CODE = `exports.handler = function(context, event, callback) {
     const dial = twiml.dial();
     // record: 'record-from-start' on the Conference verb records the whole mixed conversation
     // (agent + lead), fetched later via /Conferences/{sid}/Recordings, not /Calls/{sid}/Recordings.
-    const confOpts = { startConferenceOnEnter: true, endConferenceOnExit: true, beep: false, record: 'record-from-start' };
+    const confOpts = { startConferenceOnEnter: true, endConferenceOnExit: true, beep: false };
+    if (rec) confOpts.record = 'record-from-start';
     if (event.Hold !== '1') confOpts.waitUrl = '';
     dial.conference(confOpts, event.Room);
   } else {
     const timeout = parseInt(event.Timeout, 10) || 20;
-    const dial = twiml.dial({ callerId: event.CallerId, answerOnBridge: true, timeout, record: 'record-from-answer-dual' });
+    const dialOpts = { callerId: event.CallerId, answerOnBridge: true, timeout };
+    if (rec) dialOpts.record = 'record-from-answer-dual';
+    const dial = twiml.dial(dialOpts);
     dial.number(event.To);
   }
   callback(null, twiml);
@@ -263,7 +272,9 @@ const PARALLEL_CODE = `exports.handler = function(context, event, callback) {
   } else {
     // human (or undetermined — never risk hanging up on a live person)
     const dial = twiml.dial();
-    dial.conference({ startConferenceOnEnter: false, endConferenceOnExit: false, beep: false, record: 'record-from-start' }, event.Room);
+    const confOpts = { startConferenceOnEnter: false, endConferenceOnExit: false, beep: false };
+    if (event.Record === '1') confOpts.record = 'record-from-start';
+    dial.conference(confOpts, event.Room);
   }
   callback(null, twiml);
 };`;
@@ -271,7 +282,9 @@ const PARALLEL_CODE = `exports.handler = function(context, event, callback) {
 // caller so the CRM can match them to a lead. If nobody answers in 25s, take a voicemail.
 const INBOUND_CODE = `exports.handler = function(context, event, callback) {
   const twiml = new Twilio.twiml.VoiceResponse();
-  const dial = twiml.dial({ callerId: event.From, timeout: 25, answerOnBridge: true, record: 'record-from-answer-dual' });
+  const dialOpts = { callerId: event.From, timeout: 25, answerOnBridge: true };
+  if (event.Record === '1') dialOpts.record = 'record-from-answer-dual';
+  const dial = twiml.dial(dialOpts);
   dial.client(${JSON.stringify(CLIENT_IDENTITY)});
   callback(null, twiml);
 };`;
@@ -285,7 +298,9 @@ const AUTO_SINGLE_CODE = `exports.handler = function(context, event, callback) {
   if (answeredBy.indexOf('machine') === 0 || answeredBy === 'fax') {
     twiml.hangup();
   } else {
-    twiml.dial({ callerId: event.To, timeout: 25, record: 'record-from-answer-dual' }).client(${JSON.stringify(CLIENT_IDENTITY)});
+    const dialOpts = { callerId: event.To, timeout: 25 };
+    if (event.Record === '1') dialOpts.record = 'record-from-answer-dual';
+    twiml.dial(dialOpts).client(${JSON.stringify(CLIENT_IDENTITY)});
   }
   callback(null, twiml);
 };`;
@@ -362,7 +377,11 @@ async function syncVoiceFunctionsIfNeeded() {
 // PSTN calls ring the browser client. Returns which numbers were wired.
 async function enableInbound(numbers) {
   const domain = await deployVoiceFunctions();
-  const inboundUrl = `https://${domain}/inbound`;
+  // A PSTN-initiated inbound call can't pass a live per-call flag from our side (no callback
+  // into this app — see the "no public server" gotcha), so the record on/off setting for
+  // inbound has to be baked into each number's voice_url instead. Re-running this function
+  // (done automatically whenever the Settings toggle changes) is what picks up a new value.
+  const inboundUrl = `https://${domain}/inbound?Record=${recordCallsEnabled() ? '1' : '0'}`;
   const owned = await twilioApi('/IncomingPhoneNumbers.json?PageSize=50');
   const want = Array.isArray(numbers) && numbers.length ? new Set(numbers) : null;
   const excluded = new Set((readConfig().callSettings || {}).excludedNumbers || []);
@@ -545,6 +564,47 @@ const server = http.createServer(async (req, res) => {
       out.sort((a, b) => new Date(b.ts) - new Date(a.ts));
       return json(res, 200, out);
     }
+    if (p === '/api/twilio/recordings-all' && req.method === 'GET') {
+      // Same live-lookup approach as the per-lead route, just widened to a recent window
+      // (default 7 days, capped at 30) instead of one lead — fetched in parallel since this can
+      // mean a lot of individual Twilio round trips otherwise. Note: a ring-my-phone session
+      // reuses ONE conference (and its one continuous recording) across every lead dialed in
+      // that session, so a multi-lead session's recording legitimately shows up more than once
+      // here, tagged with whichever lead's row happened to surface it first — not a bug, just
+      // how conference recording works when several people share one continuous room.
+      const days = Math.max(1, Math.min(30, Number(url.searchParams.get('days')) || 7));
+      const since = Date.now() - days * 86400000;
+      const rows = calls.filter(c => (c.sid || c.room) && new Date(c.ts).getTime() >= since);
+      const seenRooms = new Set();
+      const jobs = [];
+      for (const c of rows) {
+        if (c.sid) {
+          jobs.push(twilioApi(`/Calls/${c.sid}/Recordings.json`)
+            .then(r => (r.recordings || []).map(rec => ({ sid: rec.sid, ts: c.ts, duration: rec.duration, leadId: c.leadId })))
+            .catch(() => []));
+        } else if (c.room && !seenRooms.has(c.room)) {
+          seenRooms.add(c.room);
+          jobs.push((async () => {
+            try {
+              const conf = await twilioApi(`/Conferences.json?FriendlyName=${encodeURIComponent(c.room)}`);
+              const out = [];
+              for (const cf of conf.conferences || []) {
+                const r = await twilioApi(`/Conferences/${cf.sid}/Recordings.json`);
+                for (const rec of r.recordings || []) out.push({ sid: rec.sid, ts: c.ts, duration: rec.duration, leadId: c.leadId });
+              }
+              return out;
+            } catch (e) { return []; }
+          })());
+        }
+      }
+      const results = (await Promise.all(jobs)).flat();
+      const withNames = results.map(r => {
+        const lead = leads.find(l => l.id === r.leadId);
+        return Object.assign({}, r, { leadName: lead ? lead.name : null, leadPhone: lead ? lead.phone : null });
+      });
+      withNames.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+      return json(res, 200, withNames.slice(0, 200));
+    }
     const recAudioMatch = p.match(/^\/api\/twilio\/recording-audio\/(RE[a-zA-Z0-9]+)$/);
     if (recAudioMatch && req.method === 'GET') {
       // Proxies the actual audio bytes so the browser never needs Twilio credentials — a plain
@@ -570,6 +630,21 @@ const server = http.createServer(async (req, res) => {
       const result = await enableInbound(numbers);
       return json(res, 200, { ok: true, ...result });
     }
+    if (p === '/api/twilio/set-recording' && req.method === 'POST') {
+      // Manual/keypad/hands-free/parallel calls read this setting fresh on every dial (it's just
+      // a query-string flag on that call's Function URL), so those take effect immediately with
+      // no redeploy. Inbound is the one exception — its record flag is baked into each number's
+      // voice_url at the time inbound was enabled, so if inbound is already on, refresh those
+      // URLs now instead of leaving them on whatever was set previously.
+      const { enabled } = await body(req);
+      const cfg = readConfig();
+      cfg.callSettings = Object.assign({}, cfg.callSettings, { recordCalls: !!enabled });
+      writeConfig(cfg);
+      if (cfg.callSettings.inboundEnabled) {
+        try { await enableInbound(cfg.callSettings.inboundNumbers); } catch (e) { /* inbound refresh failed — recording setting itself still saved */ }
+      }
+      return json(res, 200, { ok: true, recordCalls: !!enabled });
+    }
     if (p === '/api/twilio/auto-single' && req.method === 'POST') {
       // hands-free single dial: create one AMD call, poll to a verdict, return the outcome.
       const { to, callerId, ringTimeoutSec, leadId, leadState } = await body(req);
@@ -580,7 +655,7 @@ const server = http.createServer(async (req, res) => {
       try {
         call = await twilioApi('/Calls.json', 'POST', {
           To: to, From: callerId || activeCallerId(),
-          Url: url, MachineDetection: 'Enable', Timeout: String(timeout)
+          Url: `${url}?Record=${recordCallsEnabled() ? '1' : '0'}`, MachineDetection: 'Enable', Timeout: String(timeout)
           // Stock AMD defaults — reliable voicemail filtering. We tried tuning it toward "human"
           // to shorten the answer gap, but that let voicemails through as "human" (worse), so it's
           // reverted. Filtering voicemails > shaving ~2s off the gap for this use case.
@@ -633,7 +708,7 @@ const server = http.createServer(async (req, res) => {
         const j = await twilioApi('/Calls.json', 'POST', {
           To: c.to,
           From: c.callerId || activeCallerId(),
-          Url: `${parallelLegUrl}?Room=${encodeURIComponent(room)}`,
+          Url: `${parallelLegUrl}?Room=${encodeURIComponent(room)}&Record=${recordCallsEnabled() ? '1' : '0'}`,
           MachineDetection: 'Enable', // fastest AMD mode — fewer billed seconds before we hang up on a machine
           Timeout: String(timeout)
         });
@@ -686,16 +761,17 @@ const server = http.createServer(async (req, res) => {
       const agentPhone = cfg.callSettings && cfg.callSettings.ringMyPhone && cfg.callSettings.ringMyPhone.number;
       if (!agentPhone) return json(res, 400, { error: 'No phone number set for "Ring My Phone" in Settings.' });
       const domain = await getVoiceDomain();
+      const recFlag = recordCallsEnabled() ? '1' : '0';
       let voiceUrl;
       if (mode === 'parallel') {
         if (!room) return json(res, 400, { error: 'room required for parallel mode' });
         // Hold=1 tells outbound.js this leg is a real phone call (not the browser), so it should
         // get Twilio's actual hold music instead of dead air while waiting between dial attempts.
-        voiceUrl = `https://${domain}/outbound?Mode=parallel&Room=${encodeURIComponent(room)}&Hold=1`;
+        voiceUrl = `https://${domain}/outbound?Mode=parallel&Room=${encodeURIComponent(room)}&Hold=1&Record=${recFlag}`;
       } else {
         if (!to) return json(res, 400, { error: 'to required for direct mode' });
         const timeout = Math.max(5, Math.min(45, Number(timeoutSec) || 20));
-        voiceUrl = `https://${domain}/outbound?To=${encodeURIComponent(to)}&CallerId=${encodeURIComponent(callerId || activeCallerId() || '')}&Timeout=${timeout}`;
+        voiceUrl = `https://${domain}/outbound?To=${encodeURIComponent(to)}&CallerId=${encodeURIComponent(callerId || activeCallerId() || '')}&Timeout=${timeout}&Record=${recFlag}`;
       }
       const j = await twilioApi('/Calls.json', 'POST', { To: agentPhone, From: activeCallerId(), Url: voiceUrl });
       return json(res, 200, { sid: j.sid });
